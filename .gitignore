@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+frontend-new/.env.local
+node_modules/
+frontend-new/dist/
+frontend-new/.vite/
+*.log
+.DS_Store
