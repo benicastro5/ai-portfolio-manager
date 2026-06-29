@@ -48,7 +48,7 @@ function App() {
         {!portfolioData ? (
           <OnboardingForm onSubmit={handleGenerate} loading={loading} error={error} />
         ) : (
-          <Dashboard data={portfolioData} />
+          <Dashboard data={portfolioData} onLoadPortfolio={(saved) => setPortfolioData(saved)} />
         )}
       </main>
 

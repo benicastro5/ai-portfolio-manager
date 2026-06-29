@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || 'https://ai-portfolio-manager-vge2.onrender.com'
+export const BASE = import.meta.env.VITE_API_URL || 'https://ai-portfolio-manager-vge2.onrender.com'
 
 export async function generatePortfolio(profile) {
   const res = await fetch(`${BASE}/portfolio/generate`, {

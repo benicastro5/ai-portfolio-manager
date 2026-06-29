@@ -15,6 +15,8 @@ from explanation_engine import generate_portfolio_explanation
 from forecast_engine import ensemble_forecast
 from fundamentals import fetch_fundamentals, score_fundamentals
 from geography import filter_by_geography, build_geo_constraints, compute_geo_exposure
+from stress_test import run_stress_tests
+from health_score import compute_health_score
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -186,6 +188,37 @@ def generate_portfolio(profile: UserProfile):
 
         geo_exposure = compute_geo_exposure(dollar_allocs)
 
+        # Stress testing
+        stress_results = run_stress_tests(dollar_allocs, profile.investment_amount)
+
+        # Portfolio health score
+        health = compute_health_score(
+            portfolio={**result, "allocations": dollar_allocs},
+            user_profile=profile.dict(),
+            geo_exposure=geo_exposure,
+        )
+
+        # Benchmark comparison: SPY (100% equity) and 60/40 (SPY + BND)
+        spy_data = market_data.get("SPY") or market_data.get(list(market_data.keys())[0])
+        bnd_data = market_data.get("BND")
+        spy_ret = forecasts.get("SPY", {}).get("ensemble_return", 0) or 0
+        spy_vol = spy_data.get("volatility", 0.18) if spy_data else 0.18
+        bnd_ret = forecasts.get("BND", {}).get("ensemble_return", 0) or 0.04
+        bnd_vol = bnd_data.get("volatility", 0.07) if bnd_data else 0.07
+        benchmarks = {
+            "spy": {
+                "label": "SPY (S&P 500)", "return": round(spy_ret, 2),
+                "volatility": round(spy_vol * 100, 1),
+                "sharpe": round((spy_ret - 0.045) / spy_vol, 2) if spy_vol else 0,
+            },
+            "sixty_forty": {
+                "label": "60/40 (SPY+BND)",
+                "return": round(spy_ret * 0.6 + bnd_ret * 0.4, 2),
+                "volatility": round((spy_vol * 0.6 + bnd_vol * 0.4) * 100, 1),
+                "sharpe": round(((spy_ret * 0.6 + bnd_ret * 0.4) - 0.045) / (spy_vol * 0.6 + bnd_vol * 0.4), 2) if spy_vol else 0,
+            },
+        }
+
         return {
             "portfolio": {
                 **result,
@@ -196,6 +229,9 @@ def generate_portfolio(profile: UserProfile):
                 "allocations": target_dollar_allocs,
             },
             "geo_exposure": geo_exposure,
+            "stress_tests": stress_results,
+            "health_score": health,
+            "benchmarks": benchmarks,
             "data_source": data_source,
             "data_as_of": data_as_of,
             "dominant_regime": dominant_regime,
@@ -225,6 +261,42 @@ def rebalance(req: RebalanceRequest):
         return result
     except Exception as e:
         raise HTTPException(500, f"Rebalancing failed: {str(e)}")
+
+
+@app.get("/portfolio/news")
+def get_portfolio_news(tickers: str):
+    """Fetch recent news for comma-separated list of tickers via yfinance."""
+    import yfinance as yf
+    import time
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()][:6]
+    articles = []
+    seen_titles = set()
+    for ticker in ticker_list:
+        try:
+            news = yf.Ticker(ticker).news or []
+            for item in news[:3]:
+                title = item.get("title", "")
+                if title in seen_titles:
+                    continue
+                seen_titles.add(title)
+                content = item.get("content") or {}
+                thumbnail = None
+                thumb_data = content.get("thumbnail") or item.get("thumbnail") or {}
+                resolutions = thumb_data.get("resolutions", []) if isinstance(thumb_data, dict) else []
+                if resolutions:
+                    thumbnail = resolutions[0].get("url")
+                articles.append({
+                    "ticker": ticker,
+                    "title": title,
+                    "publisher": item.get("publisher") or (content.get("provider") or {}).get("displayName", ""),
+                    "link": item.get("link") or content.get("canonicalUrl", {}).get("url", ""),
+                    "published": item.get("providerPublishTime") or content.get("pubDate", ""),
+                    "thumbnail": thumbnail,
+                })
+        except Exception:
+            pass
+    articles.sort(key=lambda x: x.get("published", 0), reverse=True)
+    return {"articles": articles[:12]}
 
 
 @app.get("/market/scan")

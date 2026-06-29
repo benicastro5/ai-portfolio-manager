@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import AllocationChart from './AllocationChart'
 import EfficientFrontierChart from './EfficientFrontierChart'
 import ETFRankingTable from './ETFRankingTable'
@@ -7,13 +7,29 @@ import ExplanationPanel from './ExplanationPanel'
 import CorrelationMatrix from './CorrelationMatrix'
 import PortfolioComparison from './PortfolioComparison'
 import GeographicDashboard from './GeographicDashboard'
+import MonteCarloChart from './MonteCarloChart'
+import StressTestPanel from './StressTestPanel'
+import HealthScore from './HealthScore'
+import NewsFeed from './NewsFeed'
+import EconomicCalendar from './EconomicCalendar'
+import BenchmarkComparison from './BenchmarkComparison'
+import { savePortfolio, loadSaved, deleteSaved } from '../utils/savedPortfolios'
 
 const fmtPct = (v) => `${v > 0 ? '+' : ''}${v?.toFixed(1)}%`
 const fmtDollar = (v) => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 
-export default function Dashboard({ data }) {
+export default function Dashboard({ data, onLoadPortfolio }) {
   const [tab, setTab] = useState('portfolio')
-  const { portfolio, target_vol_portfolio, ranked_etfs, efficient_frontier, correlation_matrix, explanation, userProfile, data_source, data_as_of, dominant_regime, geo_exposure } = data
+  const [saveName, setSaveName] = useState('')
+  const [saved, setSaved] = useState(() => loadSaved())
+  const [showSavePanel, setShowSavePanel] = useState(false)
+  const printRef = useRef()
+
+  const {
+    portfolio, target_vol_portfolio, ranked_etfs, efficient_frontier,
+    correlation_matrix, explanation, userProfile, data_source, data_as_of,
+    dominant_regime, geo_exposure, stress_tests, health_score, benchmarks,
+  } = data
 
   const regimeBadge = {
     bull:    { bg: '#f0fdf4', color: '#16a34a', label: '▲ Bull Market Regime' },
@@ -27,21 +43,47 @@ export default function Dashboard({ data }) {
     { label: 'Portfolio Volatility', value: `${portfolio.portfolio_volatility?.toFixed(1)}%`, sub: 'Annual', color: 'var(--gold)' },
     { label: 'Sharpe Ratio', value: portfolio.sharpe_ratio?.toFixed(2), sub: 'Risk-Adjusted', color: 'var(--accent)' },
     { label: 'Max Drawdown Est.', value: `${portfolio.max_drawdown_estimate?.toFixed(1)}%`, sub: '95th pctile', color: 'var(--red)' },
-    { label: 'Diversification', value: `${portfolio.diversification_ratio?.toFixed(2)}x`, sub: 'Ratio', color: 'var(--accent-light)' },
+    { label: 'Health Score', value: health_score?.overall ?? '—', sub: health_score?.overall_label ?? '', color: health_score?.overall_color ?? 'var(--accent)' },
   ]
 
   const tabs = [
-    { id: 'portfolio', label: '◆ Portfolio' },
-    { id: 'compare', label: '⇄ Compare' },
-    { id: 'geography', label: '🌍 Geography' },
-    { id: 'ranking', label: '↑ ETF Ranking' },
-    { id: 'frontier', label: '~ Efficient Frontier' },
-    { id: 'rebalance', label: '⟳ Rebalancing' },
-    { id: 'explain', label: '◉ AI Explanation' },
+    { id: 'portfolio',    label: '◆ Portfolio' },
+    { id: 'health',       label: '◉ Health Score' },
+    { id: 'monte',        label: '~ Monte Carlo' },
+    { id: 'stress',       label: '⚡ Stress Tests' },
+    { id: 'benchmark',    label: '⊞ Benchmark' },
+    { id: 'compare',      label: '⇄ Compare' },
+    { id: 'geography',    label: '🌍 Geography' },
+    { id: 'news',         label: '◎ News Feed' },
+    { id: 'calendar',     label: '◇ Macro Calendar' },
+    { id: 'ranking',      label: '↑ ETF Ranking' },
+    { id: 'frontier',     label: '~ Efficient Frontier' },
+    { id: 'rebalance',    label: '⟳ Rebalancing' },
+    { id: 'explain',      label: '◉ AI Explanation' },
   ]
 
+  const handleSave = () => {
+    if (!saveName.trim()) return
+    const entry = savePortfolio(saveName.trim(), data)
+    setSaved(loadSaved())
+    setSaveName('')
+    setShowSavePanel(false)
+    alert(`Portfolio "${entry.name}" saved!`)
+  }
+
+  const handleDelete = (id) => {
+    deleteSaved(id)
+    setSaved(loadSaved())
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  const portfolioTickers = portfolio.allocations?.map(a => a.ticker) || []
+
   return (
-    <div className="dashboard">
+    <div className="dashboard" ref={printRef}>
       {/* Summary header */}
       <div style={{ marginBottom: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
@@ -53,7 +95,7 @@ export default function Dashboard({ data }) {
               {fmtDollar(userProfile.investment_amount)} · {userProfile.goal} · {userProfile.horizon}yr horizon · {userProfile.risk_tolerance}% vol target
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
               {portfolio.num_assets} assets · MPT Optimized
             </span>
@@ -72,8 +114,73 @@ export default function Dashboard({ data }) {
                 {rb.label}
               </span>
             )}
+            {/* Save + Print buttons */}
+            <button onClick={() => setShowSavePanel(v => !v)}
+              style={{ padding: '5px 12px', borderRadius: '8px', border: '1.5px solid var(--border)',
+                background: 'var(--surface)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+              ◈ Save
+            </button>
+            <button onClick={handlePrint}
+              style={{ padding: '5px 12px', borderRadius: '8px', border: '1.5px solid var(--border)',
+                background: 'var(--surface)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+              ⊡ Print / PDF
+            </button>
           </div>
         </div>
+
+        {/* Save panel */}
+        {showSavePanel && (
+          <div style={{ marginTop: '12px', padding: '14px 16px', background: 'var(--surface2)',
+            borderRadius: '10px', border: '1px solid var(--border)' }}>
+            <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '10px' }}>Save This Portfolio</div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <input value={saveName} onChange={e => setSaveName(e.target.value)}
+                placeholder='e.g. "Aggressive Growth 2026"'
+                style={{ flex: 1, minWidth: '200px', padding: '8px 12px', borderRadius: '8px',
+                  border: '1.5px solid var(--border)', fontSize: '13px' }} />
+              <button onClick={handleSave}
+                style={{ padding: '8px 16px', borderRadius: '8px', background: 'var(--accent)',
+                  color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}>
+                Save
+              </button>
+            </div>
+            {/* Saved portfolios list */}
+            {saved.length > 0 && (
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
+                  letterSpacing: '.5px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                  Saved Portfolios
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {saved.map(s => (
+                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '10px',
+                      padding: '8px 12px', borderRadius: '8px', background: 'var(--surface)',
+                      border: '1px solid var(--border)' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600 }}>{s.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {new Date(s.savedAt).toLocaleDateString()} · {s.data.userProfile?.goal} · {fmtDollar(s.data.userProfile?.investment_amount)}
+                        </div>
+                      </div>
+                      {onLoadPortfolio && (
+                        <button onClick={() => { onLoadPortfolio(s.data); setShowSavePanel(false) }}
+                          style={{ padding: '4px 10px', borderRadius: '6px', border: '1.5px solid var(--accent)',
+                            color: 'var(--accent)', background: 'transparent', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                          Load
+                        </button>
+                      )}
+                      <button onClick={() => handleDelete(s.id)}
+                        style={{ padding: '4px 10px', borderRadius: '6px', border: '1.5px solid var(--red)',
+                          color: 'var(--red)', background: 'transparent', fontSize: '12px', cursor: 'pointer' }}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Key metrics */}
@@ -98,7 +205,6 @@ export default function Dashboard({ data }) {
       {/* Tab: Portfolio */}
       {tab === 'portfolio' && (
         <div className="dashboard-grid">
-          {/* Allocation breakdown */}
           <div className="card">
             <div className="card-title">Dollar Allocation</div>
             {portfolio.allocations.map(a => (
@@ -119,13 +225,11 @@ export default function Dashboard({ data }) {
             )}
           </div>
 
-          {/* Pie chart */}
           <div className="card">
             <div className="card-title">Allocation by Weight</div>
             <AllocationChart allocations={portfolio.allocations} />
           </div>
 
-          {/* Risk contributions */}
           <div className="card span-full">
             <div className="card-title">Holdings Detail</div>
             <table className="data-table">
@@ -179,11 +283,42 @@ export default function Dashboard({ data }) {
             </table>
           </div>
 
-          {/* Correlation matrix */}
           <div className="card span-full">
             <div className="card-title">Correlation Matrix</div>
             <CorrelationMatrix data={correlation_matrix} />
           </div>
+        </div>
+      )}
+
+      {/* Tab: Health Score */}
+      {tab === 'health' && (
+        <div className="card">
+          <div className="card-title">Portfolio Health Score</div>
+          <HealthScore healthScore={health_score} />
+        </div>
+      )}
+
+      {/* Tab: Monte Carlo */}
+      {tab === 'monte' && (
+        <div className="card">
+          <div className="card-title">Monte Carlo Simulation — Future Outcome Scenarios</div>
+          <MonteCarloChart portfolio={portfolio} userProfile={userProfile} />
+        </div>
+      )}
+
+      {/* Tab: Stress Tests */}
+      {tab === 'stress' && (
+        <div className="card">
+          <div className="card-title">Historical Crisis Stress Testing</div>
+          <StressTestPanel stressTests={stress_tests} investmentAmount={userProfile.investment_amount} />
+        </div>
+      )}
+
+      {/* Tab: Benchmark */}
+      {tab === 'benchmark' && (
+        <div className="card">
+          <div className="card-title">Benchmark Comparison — SPY &amp; 60/40</div>
+          <BenchmarkComparison portfolio={portfolio} benchmarks={benchmarks} />
         </div>
       )}
 
@@ -205,6 +340,22 @@ export default function Dashboard({ data }) {
         <div className="card">
           <div className="card-title">Geographic Exposure</div>
           <GeographicDashboard geoExposure={geo_exposure} />
+        </div>
+      )}
+
+      {/* Tab: News Feed */}
+      {tab === 'news' && (
+        <div className="card">
+          <div className="card-title">Portfolio News Feed</div>
+          <NewsFeed tickers={portfolioTickers} />
+        </div>
+      )}
+
+      {/* Tab: Economic Calendar */}
+      {tab === 'calendar' && (
+        <div className="card">
+          <div className="card-title">Macro Economic Calendar</div>
+          <EconomicCalendar portfolioTickers={portfolioTickers} />
         </div>
       )}
 
@@ -242,6 +393,15 @@ export default function Dashboard({ data }) {
       {tab === 'explain' && (
         <ExplanationPanel explanation={explanation} />
       )}
+
+      {/* Print stylesheet override */}
+      <style>{`
+        @media print {
+          .tabs, button { display: none !important; }
+          .dashboard { padding: 0 !important; }
+          .card { break-inside: avoid; }
+        }
+      `}</style>
     </div>
   )
 }
