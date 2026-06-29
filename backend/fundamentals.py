@@ -10,6 +10,7 @@ All values are cached for the lifetime of the request — this module is statele
 import yfinance as yf
 import numpy as np
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from market_data import _cache_get, _cache_set, _FUND_TTL
 
 logger = logging.getLogger(__name__)
@@ -35,20 +36,25 @@ MACRO_TICKERS = {
 
 
 def fetch_fundamentals(tickers: list[str]) -> dict:
-    """
-    Returns a dict keyed by ticker with fundamental metrics.
-    Gracefully returns empty dict per ticker on failure.
-    """
+    """Fetch fundamentals for all tickers in parallel, macro once."""
     result = {}
 
-    # ── Per-ETF fundamentals from yfinance info ──────────────────────────────
-    for ticker in tickers:
-        result[ticker] = _fetch_etf_fundamentals(ticker)
+    # Fetch macro + all ticker fundamentals in parallel
+    with ThreadPoolExecutor(max_workers=20) as ex:
+        fund_futures = {ex.submit(_fetch_etf_fundamentals, t): t for t in tickers}
+        macro_future = ex.submit(_fetch_macro)
 
-    # ── Macro: yield curve ────────────────────────────────────────────────────
-    macro = _fetch_macro()
-    for ticker in tickers:
-        result[ticker]["macro"] = macro
+        for fut in as_completed(fund_futures):
+            t = fund_futures[fut]
+            try:
+                result[t] = fut.result()
+            except Exception:
+                result[t] = {"asset_class_type": ASSET_CLASS.get(t, "equity")}
+
+        macro = macro_future.result()
+
+    for t in tickers:
+        result.setdefault(t, {})["macro"] = macro
 
     return result
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import OnboardingForm from './components/OnboardingForm'
 import Dashboard from './components/Dashboard'
+import LoadingScreen from './components/LoadingScreen'
 import { generatePortfolio } from './api'
 import './App.css'
 
@@ -45,11 +46,13 @@ function App() {
       </header>
 
       <main className="app-main">
-        {!portfolioData ? (
+        {loading ? (
+          <LoadingScreen />
+        ) : !portfolioData ? (
           <OnboardingForm onSubmit={handleGenerate} loading={loading} error={error} />
         ) : (
           <Dashboard data={portfolioData} onLoadPortfolio={(saved) => setPortfolioData(saved)} />
-        )}
+        ) }
       </main>
 
       <footer className="app-footer">
