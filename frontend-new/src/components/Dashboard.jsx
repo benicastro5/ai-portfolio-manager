@@ -223,6 +223,7 @@ export default function Dashboard({ data }) {
         <RebalancingPanel
           targetAllocations={portfolio.allocations}
           portfolioValue={userProfile.investment_amount}
+          horizon={userProfile.horizon}
         />
       )}
 

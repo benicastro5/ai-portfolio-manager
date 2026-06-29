@@ -3,7 +3,16 @@ import { rebalancePortfolio } from '../api'
 
 const fmtDollar = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 
-export default function RebalancingPanel({ targetAllocations, portfolioValue }) {
+function recommendedDrift(horizon) {
+  const h = parseFloat(horizon) || 5
+  if (h < 0.5)  return { pct: 2,  reason: 'Short horizon — tight control needed' }
+  if (h < 1)    return { pct: 3,  reason: 'Under 1 year — rebalance frequently' }
+  if (h < 3)    return { pct: 5,  reason: 'Medium-term — standard threshold' }
+  if (h < 7)    return { pct: 7,  reason: 'Long-term — allow more natural drift' }
+  return        { pct: 10, reason: 'Very long horizon — rebalance sparingly' }
+}
+
+export default function RebalancingPanel({ targetAllocations, portfolioValue, horizon }) {
   const [holdings, setHoldings] = useState(
     targetAllocations.map(a => ({ ticker: a.ticker, current_value: a.dollar_amount }))
   )
@@ -68,6 +77,12 @@ export default function RebalancingPanel({ targetAllocations, portfolioValue }) 
           <div className="form-group">
             <label style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>Drift Threshold (%)</label>
             <input type="number" min="1" max="20" value={threshold} onChange={e => setThreshold(e.target.value)} />
+            {(() => { const rec = recommendedDrift(horizon); return (
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                Recommended: <strong style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                  onClick={() => setThreshold(rec.pct)}>{rec.pct}%</strong> — {rec.reason}
+              </span>
+            )})()}
           </div>
           <button onClick={runRebalance} disabled={loading}>
             {loading ? '⟳ Computing…' : '⟳ Run Rebalance'}
