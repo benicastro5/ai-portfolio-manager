@@ -82,7 +82,7 @@ export default function OnboardingForm({ onSubmit, loading, error }) {
         <div className="form-grid">
           <div className="form-group">
             <label>Investment Amount ({form.base_currency})</label>
-            <input type="number" min="1000" value={form.investment_amount}
+            <input type="number" min="1" value={form.investment_amount}
               onChange={e => set('investment_amount', e.target.value)} required />
           </div>
 
