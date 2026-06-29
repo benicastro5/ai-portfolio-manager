@@ -13,7 +13,11 @@ export default function RebalancingPanel({ targetAllocations, portfolioValue }) 
   const [totalValue, setTotalValue] = useState(portfolioValue)
 
   const updateHolding = (ticker, val) => {
-    setHoldings(h => h.map(x => x.ticker === ticker ? { ...x, current_value: Number(val) } : x))
+    setHoldings(h => {
+      const updated = h.map(x => x.ticker === ticker ? { ...x, current_value: Number(val) } : x)
+      setTotalValue(updated.reduce((sum, x) => sum + (Number(x.current_value) || 0), 0))
+      return updated
+    })
   }
 
   const runRebalance = async () => {
@@ -55,8 +59,11 @@ export default function RebalancingPanel({ targetAllocations, portfolioValue }) 
         </div>
         <div className="rebal-form">
           <div className="form-group">
-            <label style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>Total Portfolio Value ($)</label>
-            <input type="number" value={totalValue} onChange={e => setTotalValue(e.target.value)} />
+            <label style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>
+              Total Portfolio Value ($) <span style={{ color: 'var(--accent)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— auto-updated</span>
+            </label>
+            <input type="number" value={Math.round(totalValue)} readOnly
+              style={{ background: 'var(--surface2)', cursor: 'default', fontWeight: 700, color: 'var(--accent)' }} />
           </div>
           <div className="form-group">
             <label style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>Drift Threshold (%)</label>

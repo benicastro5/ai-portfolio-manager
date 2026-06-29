@@ -1,5 +1,18 @@
 import { useState } from 'react'
 
+function horizonLabel(val) {
+  const v = parseFloat(val)
+  if (v < 1) {
+    const months = Math.round(v * 12)
+    return `${months} month${months !== 1 ? 's' : ''}`
+  }
+  if (v === 1) return '1 year'
+  if (Number.isInteger(v)) return `${v} years`
+  const years = Math.floor(v)
+  const months = Math.round((v - years) * 12)
+  return months > 0 ? `${years}y ${months}m` : `${years} years`
+}
+
 const SECTORS = ['Technology', 'Energy', 'Commodities', 'Real Estate', 'High Yield', 'Emerging Markets', 'Small Cap']
 const ETFS = ['SPY', 'QQQ', 'IWM', 'EFA', 'EEM', 'BND', 'TLT', 'GLD', 'SLV', 'USO', 'VNQ', 'HYG', 'LQD', 'SHY', 'TIP', 'DBC']
 
@@ -68,10 +81,13 @@ export default function OnboardingForm({ onSubmit, loading, error }) {
           </div>
 
           <div className="form-group">
-            <label>Investment Horizon (Years)</label>
-            <input type="number" min="0.1" max="50" step="0.25" value={form.horizon}
-              onChange={e => set('horizon', e.target.value)} required />
-            <span className="form-hint">e.g. 0.25 = 3 months, 0.5 = 6 months, 1 = 1 year</span>
+            <label>Investment Horizon — <strong>{horizonLabel(form.horizon)}</strong></label>
+            <input type="range" min="0.25" max="30" step="0.25" value={form.horizon}
+              onChange={e => set('horizon', e.target.value)} required
+              style={{ width: '100%', accentColor: 'var(--accent)' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              <span>3 months</span><span>5 years</span><span>10 years</span><span>30 years</span>
+            </div>
           </div>
 
           <div className="form-group">
