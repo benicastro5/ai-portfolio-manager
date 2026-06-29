@@ -22,9 +22,14 @@ app = FastAPI(title="AI Institutional Portfolio Manager", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str):
+    return {}
 
 ALL_TICKERS = list(ETF_UNIVERSE.keys())
 
