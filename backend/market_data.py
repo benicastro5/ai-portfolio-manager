@@ -230,7 +230,7 @@ def _download_batch_safe(batch: list[str], start_str: str, end_str: str) -> dict
     return prices
 
 
-def fetch_market_data(tickers: list[str], period_years: int = 2) -> dict:
+def fetch_market_data(tickers: list[str], period_years: int = 3) -> dict:
     # 1 year of data is enough for MPT — 3x faster download
     end_date = datetime.now()
     start_date = end_date - timedelta(days=365 * period_years)
@@ -279,7 +279,7 @@ def prewarm_cache():
     """Pre-fetch all tickers on server startup so the first user request is fast."""
     logger.info("Pre-warming market data cache for all tickers...")
     all_tickers = list(ETF_UNIVERSE.keys())
-    fetch_market_data(all_tickers, period_years=2)
+    fetch_market_data(all_tickers, period_years=3)
     logger.info(f"Cache pre-warm complete — {len(all_tickers)} tickers cached.")
 
 
