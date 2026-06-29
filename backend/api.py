@@ -26,9 +26,11 @@ app = FastAPI(title="AI Institutional Portfolio Manager", version="1.0.0")
 
 @app.on_event("startup")
 async def startup_prewarm():
-    """Pre-warm the market data cache in the background on server start."""
+    """Pre-warm market data cache in background — does not block startup."""
     from market_data import prewarm_cache
-    threading.Thread(target=prewarm_cache, daemon=True).start()
+    t = threading.Thread(target=prewarm_cache, daemon=True)
+    t.start()
+    logger.info("Cache pre-warm started in background thread.")
 
 app.add_middleware(
     CORSMiddleware,

@@ -196,13 +196,48 @@ def _download_batch(tickers: list[str], start: str, end: str) -> pd.DataFrame:
     return close.dropna(how="all")
 
 
-def fetch_market_data(tickers: list[str], period_years: int = 3) -> dict:
+def _download_batch_safe(batch: list[str], start_str: str, end_str: str) -> dict[str, pd.Series]:
+    """Download a batch of tickers, return {ticker: daily_close_series}."""
+    import warnings
+    prices = {}
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            raw = yf.download(
+                batch, start=start_str, end=end_str,
+                progress=False, auto_adjust=True, threads=True,
+            )
+        if raw.empty:
+            return prices
+
+        # yfinance returns MultiIndex (field, ticker) for multiple tickers
+        # and flat columns for single ticker
+        if len(batch) == 1:
+            t = batch[0]
+            if "Close" in raw.columns:
+                s = raw["Close"].dropna()
+                if len(s) > 20:
+                    prices[t] = s
+        else:
+            close = raw["Close"] if "Close" in raw.columns else raw.xs("Close", axis=1, level=0)
+            for t in batch:
+                if t in close.columns:
+                    s = close[t].dropna()
+                    if len(s) > 20:
+                        prices[t] = s
+    except Exception as e:
+        logger.warning(f"Batch download failed {batch[:3]}...: {e}")
+    return prices
+
+
+def fetch_market_data(tickers: list[str], period_years: int = 1) -> dict:
+    # 1 year of data is enough for MPT — 3x faster download
     end_date = datetime.now()
     start_date = end_date - timedelta(days=365 * period_years)
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
 
-    # Serve fully cached tickers immediately
+    # Serve cached tickers immediately
     result = {}
     uncached = []
     for t in tickers:
@@ -216,53 +251,27 @@ def fetch_market_data(tickers: list[str], period_years: int = 3) -> dict:
         logger.info("All tickers served from cache.")
         return result
 
-    # ONE bulk download for all uncached tickers — single HTTP round-trip
-    logger.info(f"Bulk downloading {len(uncached)} tickers in one request...")
-    import warnings
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            if len(uncached) == 1:
-                raw = yf.download(uncached[0], start=start_str, end=end_str,
-                                  progress=False, auto_adjust=True)
-                if not raw.empty:
-                    raw.columns = pd.MultiIndex.from_tuples(
-                        [(c, uncached[0]) for c in raw.columns])
-            else:
-                raw = yf.download(uncached, start=start_str, end=end_str,
-                                  progress=False, auto_adjust=True, group_by="ticker")
-    except Exception as e:
-        logger.warning(f"Bulk download failed: {e}. Falling back to mock data.")
-        raw = pd.DataFrame()
-
-    # Extract per-ticker Close series from the multi-level DataFrame
+    logger.info(f"Downloading {len(uncached)} uncached tickers in batches of 25...")
     all_prices: dict[str, pd.Series] = {}
-    if not raw.empty:
-        for t in uncached:
-            try:
-                if len(uncached) == 1:
-                    series = raw["Close"].dropna() if "Close" in raw.columns else pd.Series()
-                else:
-                    series = raw[t]["Close"].dropna() if t in raw.columns.get_level_values(0) else pd.Series()
-                if len(series) > 20:
-                    all_prices[t] = series
-            except Exception:
-                pass
+    BATCH = 25
+    for i in range(0, len(uncached), BATCH):
+        batch = uncached[i:i + BATCH]
+        all_prices.update(_download_batch_safe(batch, start_str, end_str))
 
-    # Compute metrics for successfully downloaded tickers
     for t in uncached:
         if t not in all_prices:
             data = _mock_data(t)
         else:
             try:
-                monthly_prices = all_prices[t].resample("ME").last()
-                monthly_returns = monthly_prices.pct_change().dropna()
-                data = _compute_metrics(t, monthly_returns, monthly_prices) if len(monthly_returns) >= 12 else _mock_data(t)
+                monthly = all_prices[t].resample("ME").last()
+                rets = monthly.pct_change().dropna()
+                data = _compute_metrics(t, rets, monthly) if len(rets) >= 6 else _mock_data(t)
             except Exception:
                 data = _mock_data(t)
         _cache_set(f"price:{t}", data)
         result[t] = data
 
+    logger.info(f"Done. {sum(1 for d in result.values() if d.get('dates'))} live / {len(result)} total")
     return result
 
 
