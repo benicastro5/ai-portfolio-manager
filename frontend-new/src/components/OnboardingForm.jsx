@@ -14,8 +14,21 @@ function horizonLabel(val) {
   return months > 0 ? `${years}y ${months}m` : `${years} years`
 }
 
-const SECTORS = ['Technology', 'Energy', 'Commodities', 'Real Estate', 'High Yield', 'Emerging Markets', 'Small Cap']
-const ETFS = ['SPY', 'QQQ', 'IWM', 'EFA', 'EEM', 'BND', 'TLT', 'GLD', 'SLV', 'USO', 'VNQ', 'HYG', 'LQD', 'SHY', 'TIP', 'DBC']
+const SECTORS = ['Technology', 'Energy', 'Commodities', 'Real Estate', 'High Yield', 'Emerging Markets', 'Small Cap', 'Financials', 'Healthcare', 'Consumer Staples', 'Consumer Discretionary', 'Industrials', 'Communication Services', 'Semiconductors']
+
+const ETFS = ['SPY','QQQ','IWM','EFA','EEM','BND','TLT','GLD','SLV','USO','VNQ','HYG','LQD','SHY','TIP','DBC']
+
+const STOCKS = [
+  'AAPL','MSFT','NVDA','GOOGL','META','AMZN','TSLA','AVGO','ORCL','CRM','AMD','INTC','ADBE','NOW','UBER',
+  'JPM','BAC','GS','MS','BRK-B','V','MA','BLK','SCHW','AXP',
+  'JNJ','UNH','LLY','ABBV','PFE','MRK','TMO','ABT','ISRG',
+  'WMT','COST','PG','KO','PEP','MCD','NKE','SBUX','HD','TGT',
+  'XOM','CVX','COP','SLB',
+  'CAT','HON','UPS','BA','RTX','GE','LMT',
+  'NFLX','DIS','T','VZ','TMUS','SPOT',
+  'PLD','AMT','EQIX','LIN','APD','NEM',
+  'TSM','ASML','SAP','TM','BABA','NVO','SHEL',
+]
 
 export default function OnboardingForm({ onSubmit, loading, error }) {
   const [form, setForm] = useState({
@@ -157,6 +170,25 @@ export default function OnboardingForm({ onSubmit, loading, error }) {
                     borderColor: form.excluded_assets.includes(t) ? 'var(--red)' : 'var(--border)',
                     background: form.excluded_assets.includes(t) ? 'var(--red-pale)' : 'var(--surface)',
                     color: form.excluded_assets.includes(t) ? 'var(--red)' : 'var(--text)',
+                  }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group form-full">
+            <label>Exclude Specific Stocks</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+              {STOCKS.map(t => (
+                <button key={t} type="button"
+                  onClick={() => toggleList('excluded_assets', t)}
+                  style={{
+                    padding: '5px 12px', borderRadius: '20px', border: '1.5px solid',
+                    fontSize: '12px', cursor: 'pointer', fontWeight: 700,
+                    borderColor: form.excluded_assets.includes(t) ? 'var(--red)' : 'var(--border)',
+                    background: form.excluded_assets.includes(t) ? 'var(--red-pale)' : 'var(--surface)',
+                    color: form.excluded_assets.includes(t) ? 'var(--red)' : 'var(--accent)',
                   }}>
                   {t}
                 </button>

@@ -72,6 +72,28 @@ ETF_GEO: dict[str, dict] = {
     "SLV":  {"continent": "Global",        "regions": ["global"],              "countries": ["global"],          "always_include": True},
     "USO":  {"continent": "Global",        "regions": ["global"],              "countries": ["global"],          "always_include": True},
     "DBC":  {"continent": "Global",        "regions": ["global"],              "countries": ["global"],          "always_include": True},
+    # ── US Stocks (all tagged US / North America) ─────────────────
+    **{t: {"continent": "North America", "regions": ["us"], "countries": ["us"], "always_include": False}
+       for t in [
+           "AAPL","MSFT","NVDA","GOOGL","META","AMZN","TSLA","AVGO","ORCL","CRM",
+           "AMD","INTC","ADBE","NOW","UBER",
+           "JPM","BAC","GS","MS","BRK-B","V","MA","BLK","SCHW","AXP",
+           "JNJ","UNH","LLY","ABBV","PFE","MRK","TMO","ABT","ISRG",
+           "WMT","COST","PG","KO","PEP","MCD","NKE","SBUX","HD","TGT",
+           "XOM","CVX","COP","SLB",
+           "CAT","HON","UPS","BA","RTX","GE","LMT",
+           "NFLX","DIS","T","VZ","TMUS","SPOT",
+           "PLD","AMT","EQIX",
+           "LIN","APD","NEM",
+       ]},
+    # ── International ADRs ────────────────────────────────────────
+    "TSM":   {"continent": "Asia",          "regions": ["southeast_asia", "emerging_markets"], "countries": ["taiwan"],  "always_include": False},
+    "ASML":  {"continent": "Europe",        "regions": ["europe"],              "countries": ["europe"],          "always_include": False},
+    "SAP":   {"continent": "Europe",        "regions": ["europe"],              "countries": ["europe"],          "always_include": False},
+    "TM":    {"continent": "Asia",          "regions": ["japan"],               "countries": ["japan"],           "always_include": False},
+    "BABA":  {"continent": "Asia",          "regions": ["china", "emerging_markets"], "countries": ["china"],    "always_include": False},
+    "NVO":   {"continent": "Europe",        "regions": ["europe"],              "countries": ["europe"],          "always_include": False},
+    "SHEL":  {"continent": "Europe",        "regions": ["europe", "uk"],        "countries": ["uk"],              "always_include": False},
 }
 
 # User-facing region labels → internal region keys
