@@ -4,6 +4,8 @@ import pandas as pd
 
 def score_etf(data: dict, corr_matrix: pd.DataFrame = None, portfolio_tickers: list = None) -> dict:
     scores = {}
+    if data.get("fundamental_score") is not None:
+        scores["fundamental_score"] = data["fundamental_score"]
 
     # 1. Return score (0-100): map ann_return from -20% to +30%
     ret = data["ann_return"]
@@ -40,8 +42,8 @@ def score_etf(data: dict, corr_matrix: pd.DataFrame = None, portfolio_tickers: l
     else:
         scores["diversification_score"] = 50.0
 
-    # Composite score with weights
-    weights = {
+    # Technical composite (80% of final score)
+    tech_weights = {
         "sharpe_score": 0.30,
         "return_score": 0.15,
         "volatility_score": 0.15,
@@ -50,14 +52,21 @@ def score_etf(data: dict, corr_matrix: pd.DataFrame = None, portfolio_tickers: l
         "trend_score": 0.05,
         "diversification_score": 0.05,
     }
+    tech_composite = sum(scores[k] * tech_weights[k] for k in tech_weights)
+    scores["technical_score"] = round(tech_composite, 1)
 
-    composite = sum(scores[k] * weights[k] for k in weights)
+    # Fundamental score blended in if provided (20% weight)
+    fund_score = scores.pop("fundamental_score", None)
+    if fund_score is not None:
+        composite = tech_composite * 0.80 + fund_score * 0.20
+    else:
+        composite = tech_composite
+
     scores["composite_score"] = round(composite, 1)
-
     return scores
 
 
-def rank_etfs(market_data: dict, corr_matrix: pd.DataFrame = None, forecasts: dict = None) -> list[dict]:
+def rank_etfs(market_data: dict, corr_matrix: pd.DataFrame = None, forecasts: dict = None, fundamentals: dict = None) -> list[dict]:
     tickers = list(market_data.keys())
     ranked = []
 
@@ -70,6 +79,9 @@ def rank_etfs(market_data: dict, corr_matrix: pd.DataFrame = None, forecasts: di
             score_data["ann_vol"] = fc.get("forecasted_annual_vol", data["ann_vol"])
             score_data["sharpe"] = fc.get("forecasted_sharpe", data["sharpe"])
 
+        fund_info = (fundamentals or {}).get(ticker, {})
+        if fund_info:
+            score_data["fundamental_score"] = fund_info.get("fundamental_score", None)
         scores = score_etf(score_data, corr_matrix, tickers)
         regime = fc.get("regime", {}) if fc else {}
         garch = fc.get("garch", {}) if fc else {}
@@ -101,6 +113,14 @@ def rank_etfs(market_data: dict, corr_matrix: pd.DataFrame = None, forecasts: di
             "current_price": round(data.get("current_price", 0), 2),
             "data_source": "live" if data.get("dates") else "mock",
             "scores": scores,
+            # Fundamentals
+            "pe_ratio": fund_info.get("pe_ratio"),
+            "pb_ratio": fund_info.get("pb_ratio"),
+            "dividend_yield": fund_info.get("dividend_yield"),
+            "earnings_growth": fund_info.get("earnings_growth"),
+            "yield_curve_signal": fund_info.get("yield_curve_signal"),
+            "fundamental_score": fund_info.get("fundamental_score"),
+            "technical_score": scores.get("technical_score"),
         }
         row["recommendation"] = _get_recommendation(scores["composite_score"])
         ranked.append(row)

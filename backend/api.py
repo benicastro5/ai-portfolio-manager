@@ -13,6 +13,7 @@ from optimizer import optimize_portfolio, optimize_target_vol_portfolio, compute
 from rebalancing import compute_rebalancing, compute_dollar_allocations
 from explanation_engine import generate_portfolio_explanation
 from forecast_engine import ensemble_forecast
+from fundamentals import fetch_fundamentals, score_fundamentals
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -92,8 +93,12 @@ def generate_portfolio(profile: UserProfile):
         logger.info("Running ensemble forecast models")
         forecasts = ensemble_forecast(market_data)
 
+        # Fundamental data (P/E, P/B, dividend yield, earnings growth, macro)
+        raw_fundamentals = fetch_fundamentals(list(market_data.keys()))
+        fundamentals = {t: score_fundamentals(t, raw_fundamentals[t]) for t in raw_fundamentals}
+
         # Score and rank (use forecast returns for scoring)
-        ranked = rank_etfs(market_data, corr_matrix, forecasts=forecasts)
+        ranked = rank_etfs(market_data, corr_matrix, forecasts=forecasts, fundamentals=fundamentals)
 
         # Optimize using forecast returns + Ledoit-Wolf covariance
         result = optimize_portfolio(

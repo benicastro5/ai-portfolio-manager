@@ -20,6 +20,7 @@ const volRegimeColor = {
 export default function ETFRankingTable({ etfs }) {
   const [sort, setSort] = useState({ key: 'composite_score', dir: -1 })
   const [view, setView] = useState('forecast') // 'forecast' | 'historical'
+  const [showFundamentals, setShowFundamentals] = useState(false)
 
   const sorted = [...etfs].sort((a, b) => {
     const av = a[sort.key], bv = b[sort.key]
@@ -57,6 +58,16 @@ export default function ETFRankingTable({ etfs }) {
             ? 'Returns blended from GARCH · EWMA · Momentum · Mean-Reversion · James-Stein shrinkage'
             : '3-year trailing annualised returns from live market data'}
         </span>
+        <button onClick={() => setShowFundamentals(f => !f)}
+          style={{
+            marginLeft: 'auto', padding: '4px 12px', borderRadius: '20px', border: '1.5px solid',
+            fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+            borderColor: showFundamentals ? '#7c3aed' : 'var(--border)',
+            background: showFundamentals ? '#f5f3ff' : 'white',
+            color: showFundamentals ? '#7c3aed' : 'var(--text-muted)',
+          }}>
+          {showFundamentals ? '◉ Fundamentals ON' : '◎ Show Fundamentals'}
+        </button>
       </div>
 
       <div style={{ overflowX: 'auto' }}>
@@ -75,6 +86,14 @@ export default function ETFRankingTable({ etfs }) {
               <th>Regime</th>
               <th>Vol Regime</th>
               <Th k="momentum_3m" label="Mom 3M" />
+              {showFundamentals && <>
+                <Th k="fundamental_score" label="Fund. Score" />
+                <Th k="pe_ratio" label="P/E" />
+                <Th k="pb_ratio" label="P/B" />
+                <Th k="dividend_yield" label="Div Yield" />
+                <Th k="earnings_growth" label="EPS Growth" />
+                <th>Yield Curve</th>
+              </>}
               <th>Recommendation</th>
             </tr>
           </thead>
@@ -134,6 +153,31 @@ export default function ETFRankingTable({ etfs }) {
                   <td style={{ color: e.momentum_3m > 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
                     {e.momentum_3m > 0 ? '+' : ''}{e.momentum_3m?.toFixed(1)}%
                   </td>
+                  {showFundamentals && <>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <div style={{ width: '40px', height: '5px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{ width: `${e.fundamental_score || 50}%`, height: '100%', background: '#7c3aed', borderRadius: '3px' }} />
+                        </div>
+                        <span style={{ fontWeight: 700, fontSize: '12px' }}>{e.fundamental_score?.toFixed(0) ?? '—'}</span>
+                      </div>
+                    </td>
+                    <td style={{ fontSize: '12px' }}>{e.pe_ratio?.toFixed(1) ?? '—'}</td>
+                    <td style={{ fontSize: '12px' }}>{e.pb_ratio?.toFixed(1) ?? '—'}</td>
+                    <td style={{ fontSize: '12px', color: e.dividend_yield > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
+                      {e.dividend_yield != null ? `${e.dividend_yield?.toFixed(2)}%` : '—'}
+                    </td>
+                    <td style={{ fontSize: '12px', color: e.earnings_growth > 0 ? 'var(--green)' : e.earnings_growth < 0 ? 'var(--red)' : 'var(--text-muted)' }}>
+                      {e.earnings_growth != null ? `${e.earnings_growth > 0 ? '+' : ''}${e.earnings_growth?.toFixed(1)}%` : '—'}
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: '20px',
+                        background: e.yield_curve_signal === 'normal' ? '#f0fdf4' : e.yield_curve_signal === 'inverted' ? '#fef2f2' : '#fefce8',
+                        color: e.yield_curve_signal === 'normal' ? '#16a34a' : e.yield_curve_signal === 'inverted' ? '#dc2626' : '#d97706' }}>
+                        {e.yield_curve_signal || 'neutral'}
+                      </span>
+                    </td>
+                  </>}
                   <td><span className={`tag ${recColors[e.recommendation] || 'tag-gray'}`}>{e.recommendation}</span></td>
                 </tr>
               )
