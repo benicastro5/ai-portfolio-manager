@@ -126,7 +126,7 @@ def generate_portfolio(profile: UserProfile):
             cov_matrix=cov_matrix,
             user_risk_pct=profile.risk_tolerance / 100,
             goal=profile.goal,
-            max_weight=0.10,
+            max_weight=0.25,
             min_assets=4,
             method="mpt",
             forecasts=forecasts,
@@ -146,7 +146,7 @@ def generate_portfolio(profile: UserProfile):
             market_data=market_data,
             cov_matrix=cov_matrix,
             target_vol=profile.risk_tolerance / 100,
-            max_weight=0.10,
+            max_weight=0.25,
             min_assets=4,
             forecasts=forecasts,
         )
