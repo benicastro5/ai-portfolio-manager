@@ -41,11 +41,16 @@ export default function MonteCarloChart({ portfolio, userProfile }) {
 
   const goalProb = sim.goalProb(goalInput)
 
-  // Milestone projections at fixed horizons
+  // Milestone projections — always run a separate 20yr sim for the table
+  // regardless of the user's chosen horizon
+  const sim20 = useMemo(
+    () => runMonteCarlo(annReturn, annVol, initial, monthly, 20, 1000),
+    [annReturn, annVol, initial, monthly]
+  )
   const HORIZONS = [5, 10, 15, 20]
   const milestones = HORIZONS.map(yr => {
-    const monthIdx = Math.min(Math.round(yr * 12), sim.percentiles.length - 1)
-    const p = sim.percentiles[monthIdx]
+    const monthIdx = Math.round(yr * 12)
+    const p = sim20.percentiles[monthIdx]
     if (!p) return null
     const totalContrib = initial + monthly * monthIdx
     return { yr, p5: p.p5, p25: p.p25, p50: p.p50, p75: p.p75, p95: p.p95, totalContrib }
