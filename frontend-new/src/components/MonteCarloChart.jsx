@@ -41,6 +41,16 @@ export default function MonteCarloChart({ portfolio, userProfile }) {
 
   const goalProb = sim.goalProb(goalInput)
 
+  // Milestone projections at fixed horizons
+  const HORIZONS = [5, 10, 15, 20]
+  const milestones = HORIZONS.map(yr => {
+    const monthIdx = Math.min(Math.round(yr * 12), sim.percentiles.length - 1)
+    const p = sim.percentiles[monthIdx]
+    if (!p) return null
+    const totalContrib = initial + monthly * monthIdx
+    return { yr, p5: p.p5, p25: p.p25, p50: p.p50, p75: p.p75, p95: p.p95, totalContrib }
+  }).filter(Boolean)
+
   // Downsample for chart performance (max 60 points)
   const step = Math.max(1, Math.floor(sim.percentiles.length / 60))
   const chartData = sim.percentiles.filter((_, i) => i % step === 0 || i === sim.percentiles.length - 1)
@@ -88,6 +98,53 @@ export default function MonteCarloChart({ portfolio, userProfile }) {
         <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '4px' }}>
           Green band = 25th–75th percentile · Light band = 5th–95th percentile · Blue line = median
         </div>
+      </div>
+
+      {/* Milestone projection table */}
+      <div style={{ background: 'var(--surface2)', borderRadius: '12px', padding: '18px', border: '1px solid var(--border)' }}>
+        <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '4px' }}>
+          Projected Portfolio Value — Milestone Horizons
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+          Starting with {fmt(initial)}{monthly > 0 ? ` + ${fmt(monthly)}/month contributions` : ''} · {((annReturn)*100).toFixed(1)}% expected return · {((annVol)*100).toFixed(1)}% volatility
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 700 }}>Horizon</th>
+                {monthly > 0 && <th style={{ textAlign: 'right', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 700 }}>Total Invested</th>}
+                <th style={{ textAlign: 'right', padding: '8px 12px', color: '#dc2626', fontWeight: 700 }}>Worst Case (5%)</th>
+                <th style={{ textAlign: 'right', padding: '8px 12px', color: '#f97316', fontWeight: 700 }}>Conservative (25%)</th>
+                <th style={{ textAlign: 'right', padding: '8px 12px', color: '#3b82f6', fontWeight: 700 }}>Median (50%)</th>
+                <th style={{ textAlign: 'right', padding: '8px 12px', color: '#22c55e', fontWeight: 700 }}>Optimistic (75%)</th>
+                <th style={{ textAlign: 'right', padding: '8px 12px', color: '#16a34a', fontWeight: 700 }}>Best Case (95%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {milestones.map((m, i) => (
+                <tr key={m.yr} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'var(--surface)' }}>
+                  <td style={{ padding: '10px 12px', fontWeight: 800, fontSize: '14px' }}>{m.yr} years</td>
+                  {monthly > 0 && (
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-muted)', fontSize: '12px' }}>
+                      {fmt(m.totalContrib)}
+                    </td>
+                  )}
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#dc2626', fontWeight: 600 }}>{fmt(m.p5)}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#f97316', fontWeight: 600 }}>{fmt(m.p25)}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#3b82f6', fontWeight: 700, fontSize: '14px' }}>{fmt(m.p50)}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#22c55e', fontWeight: 600 }}>{fmt(m.p75)}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{fmt(m.p95)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {monthly > 0 && (
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px' }}>
+            "Total Invested" = initial amount + all monthly contributions to that date. Values above it represent portfolio growth from returns.
+          </div>
+        )}
       </div>
 
       {/* Goal probability calculator */}
