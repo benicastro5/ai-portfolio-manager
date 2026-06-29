@@ -178,7 +178,28 @@ export default function OnboardingForm({ onSubmit, loading, error }) {
           </div>
 
           <div className="form-group form-full">
-            <label>Exclude Specific Stocks</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              Exclude Specific Stocks
+              <button type="button"
+                onClick={() => {
+                  const allExcluded = STOCKS.every(t => form.excluded_assets.includes(t))
+                  setForm(f => ({
+                    ...f,
+                    excluded_assets: allExcluded
+                      ? f.excluded_assets.filter(t => !STOCKS.includes(t))
+                      : [...new Set([...f.excluded_assets, ...STOCKS])]
+                  }))
+                }}
+                style={{
+                  padding: '3px 12px', borderRadius: '20px', border: '1.5px solid',
+                  fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                  borderColor: STOCKS.every(t => form.excluded_assets.includes(t)) ? 'var(--red)' : 'var(--border)',
+                  background: STOCKS.every(t => form.excluded_assets.includes(t)) ? 'var(--red-pale)' : 'var(--surface)',
+                  color: STOCKS.every(t => form.excluded_assets.includes(t)) ? 'var(--red)' : 'var(--text-muted)',
+                }}>
+                {STOCKS.every(t => form.excluded_assets.includes(t)) ? '✕ ETFs only (undo)' : 'ETFs only — exclude all stocks'}
+              </button>
+            </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
               {STOCKS.map(t => (
                 <button key={t} type="button"
