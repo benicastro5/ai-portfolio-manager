@@ -41,6 +41,24 @@ ETF_UNIVERSE = {
     "USO": {"name": "Oil Fund ETF", "asset_class": "Commodities", "sector": "Energy"},
     "VNQ": {"name": "Real Estate ETF", "asset_class": "Real Estate", "sector": "REITs"},
     "DBC": {"name": "Commodity Index ETF", "asset_class": "Commodities", "sector": "Diversified Commodities"},
+    # ── Geographic ETFs ───────────────────────────────────────────
+    "VT":   {"name": "Vanguard Total World Stock ETF",       "asset_class": "Global Equity",        "sector": "Global"},
+    "ACWI": {"name": "iShares MSCI ACWI ETF",               "asset_class": "Global Equity",        "sector": "Global"},
+    "EWC":  {"name": "iShares MSCI Canada ETF",             "asset_class": "International Equity", "sector": "Canada"},
+    "VGK":  {"name": "Vanguard FTSE Europe ETF",            "asset_class": "International Equity", "sector": "Europe"},
+    "EWU":  {"name": "iShares MSCI United Kingdom ETF",     "asset_class": "International Equity", "sector": "United Kingdom"},
+    "EWJ":  {"name": "iShares MSCI Japan ETF",              "asset_class": "International Equity", "sector": "Japan"},
+    "MCHI": {"name": "iShares MSCI China ETF",              "asset_class": "International Equity", "sector": "China"},
+    "INDA": {"name": "iShares MSCI India ETF",              "asset_class": "International Equity", "sector": "India"},
+    "EWZ":  {"name": "iShares MSCI Brazil ETF",             "asset_class": "International Equity", "sector": "Latin America"},
+    "EWW":  {"name": "iShares MSCI Mexico ETF",             "asset_class": "International Equity", "sector": "Latin America"},
+    "ECH":  {"name": "iShares MSCI Chile ETF",              "asset_class": "International Equity", "sector": "Latin America"},
+    "EZA":  {"name": "iShares MSCI South Africa ETF",       "asset_class": "International Equity", "sector": "Africa"},
+    "EWY":  {"name": "iShares MSCI South Korea ETF",        "asset_class": "International Equity", "sector": "Asia"},
+    "EWT":  {"name": "iShares MSCI Taiwan ETF",             "asset_class": "International Equity", "sector": "Asia"},
+    "EIDO": {"name": "iShares MSCI Indonesia ETF",          "asset_class": "International Equity", "sector": "Southeast Asia"},
+    "EWA":  {"name": "iShares MSCI Australia ETF",          "asset_class": "International Equity", "sector": "Asia Pacific"},
+    "EWM":  {"name": "iShares MSCI Malaysia ETF",           "asset_class": "International Equity", "sector": "Southeast Asia"},
 }
 
 MOCK_RETURNS = {

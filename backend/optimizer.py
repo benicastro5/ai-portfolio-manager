@@ -28,7 +28,8 @@ def optimize_portfolio(
     scores: dict = None,
     method: str = "mpt",
     forecasts: dict = None,
-    max_drawdown_pct: float = None,   # e.g. -20 means max -20% drawdown
+    max_drawdown_pct: float = None,
+    extra_constraints: list = None,   # geographic or other scipy constraints
 ) -> dict:
     tickers = [t for t in market_data.keys() if t in cov_matrix.columns]
     n = len(tickers)
@@ -60,7 +61,7 @@ def optimize_portfolio(
     dd_vol_ceiling = abs(max_drawdown_pct) / 100 / 2.33 if max_drawdown_pct else None
     effective_vol = min(user_risk_pct, dd_vol_ceiling) if dd_vol_ceiling else user_risk_pct
 
-    weights = _mpt_optimize(expected_returns, cov, effective_vol, goal, max_weight, min_assets, dd_vol_ceiling)
+    weights = _mpt_optimize(expected_returns, cov, effective_vol, goal, max_weight, min_assets, dd_vol_ceiling, extra_constraints or [])
     weights = np.maximum(weights, 0)
 
     # Trim to exactly top 10 holdings by weight, then renormalize
@@ -275,6 +276,7 @@ def _mpt_optimize(
     max_weight: float,
     min_assets: int,
     dd_vol_ceiling: float = None,
+    extra_constraints: list = None,
 ) -> np.ndarray:
     n = len(expected_returns)
 
@@ -331,6 +333,10 @@ def _mpt_optimize(
             "type": "ineq",
             "fun": lambda w: dd_vol_ceiling - np.sqrt(w @ cov @ w)
         })
+
+    # Geographic or other extra constraints
+    for c in (extra_constraints or []):
+        constraints.append(c)
 
     bounds = [(0.0, max_weight)] * n
 

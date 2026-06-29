@@ -6,13 +6,14 @@ import RebalancingPanel from './RebalancingPanel'
 import ExplanationPanel from './ExplanationPanel'
 import CorrelationMatrix from './CorrelationMatrix'
 import PortfolioComparison from './PortfolioComparison'
+import GeographicDashboard from './GeographicDashboard'
 
 const fmtPct = (v) => `${v > 0 ? '+' : ''}${v?.toFixed(1)}%`
 const fmtDollar = (v) => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 
 export default function Dashboard({ data }) {
   const [tab, setTab] = useState('portfolio')
-  const { portfolio, target_vol_portfolio, ranked_etfs, efficient_frontier, correlation_matrix, explanation, userProfile, data_source, data_as_of, dominant_regime } = data
+  const { portfolio, target_vol_portfolio, ranked_etfs, efficient_frontier, correlation_matrix, explanation, userProfile, data_source, data_as_of, dominant_regime, geo_exposure } = data
 
   const regimeBadge = {
     bull:    { bg: '#f0fdf4', color: '#16a34a', label: '▲ Bull Market Regime' },
@@ -32,6 +33,7 @@ export default function Dashboard({ data }) {
   const tabs = [
     { id: 'portfolio', label: '◆ Portfolio' },
     { id: 'compare', label: '⇄ Compare' },
+    { id: 'geography', label: '🌍 Geography' },
     { id: 'ranking', label: '↑ ETF Ranking' },
     { id: 'frontier', label: '~ Efficient Frontier' },
     { id: 'rebalance', label: '⟳ Rebalancing' },
@@ -195,6 +197,14 @@ export default function Dashboard({ data }) {
             targetVolPct={userProfile.risk_tolerance}
             investmentAmount={userProfile.investment_amount}
           />
+        </div>
+      )}
+
+      {/* Tab: Geography */}
+      {tab === 'geography' && (
+        <div className="card">
+          <div className="card-title">Geographic Exposure</div>
+          <GeographicDashboard geoExposure={geo_exposure} />
         </div>
       )}
 

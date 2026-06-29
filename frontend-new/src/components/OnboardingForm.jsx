@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import GeographySelector from './GeographySelector'
 
 function horizonLabel(val) {
   const v = parseFloat(val)
@@ -27,6 +28,7 @@ export default function OnboardingForm({ onSubmit, loading, error }) {
     monthly_contribution: 0,
     excluded_sectors: [],
     excluded_assets: [],
+    geo: { regions: [], excluded: [], geoMin: {}, geoMax: {} },
   })
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
@@ -40,13 +42,18 @@ export default function OnboardingForm({ onSubmit, loading, error }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    const { geo, ...rest } = form
     onSubmit({
-      ...form,
+      ...rest,
       investment_amount: Number(form.investment_amount),
       risk_tolerance: Number(form.risk_tolerance),
       horizon: parseFloat(form.horizon),
       max_drawdown: -Math.abs(Number(form.max_drawdown)),
       monthly_contribution: Number(form.monthly_contribution),
+      geo_regions: geo.regions,
+      geo_excluded: geo.excluded,
+      geo_min: Object.fromEntries(Object.entries(geo.geoMin).filter(([,v]) => v != null)),
+      geo_max: Object.fromEntries(Object.entries(geo.geoMax).filter(([,v]) => v != null)),
     })
   }
 
@@ -111,7 +118,13 @@ export default function OnboardingForm({ onSubmit, loading, error }) {
           </div>
         </div>
 
-        <div className="form-section-title">Exclusions (Optional)</div>
+        <div className="form-section-title">Investment Geography</div>
+        <GeographySelector
+          value={form.geo}
+          onChange={geo => setForm(f => ({ ...f, geo }))}
+        />
+
+        <div className="form-section-title" style={{ marginTop: '24px' }}>Exclusions (Optional)</div>
         <div className="form-grid">
           <div className="form-group form-full">
             <label>Exclude Sectors / Asset Classes</label>

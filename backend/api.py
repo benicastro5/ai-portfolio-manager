@@ -14,6 +14,7 @@ from rebalancing import compute_rebalancing, compute_dollar_allocations
 from explanation_engine import generate_portfolio_explanation
 from forecast_engine import ensemble_forecast
 from fundamentals import fetch_fundamentals, score_fundamentals
+from geography import filter_by_geography, build_geo_constraints, compute_geo_exposure
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,6 +47,11 @@ class UserProfile(BaseModel):
     excluded_sectors: list[str] = []
     excluded_assets: list[str] = []
     existing_holdings: list[dict] = []
+    # Geographic preferences
+    geo_regions: list[str] = []         # e.g. ["us", "india", "brazil"]
+    geo_excluded: list[str] = []        # e.g. ["china"]
+    geo_min: dict[str, float] = {}      # e.g. {"india": 0.10}
+    geo_max: dict[str, float] = {}      # e.g. {"india": 0.25}
 
 
 class RebalanceRequest(BaseModel):
@@ -68,15 +74,21 @@ def get_etfs():
 @app.post("/portfolio/generate")
 def generate_portfolio(profile: UserProfile):
     try:
-        # Filter universe
+        # Filter universe: sector/asset exclusions first, then geography
         eligible = filter_by_exclusions(
             ALL_TICKERS,
             excluded_sectors=profile.excluded_sectors,
             excluded_assets=profile.excluded_assets,
         )
+        if profile.geo_regions or profile.geo_excluded:
+            eligible = filter_by_geography(
+                eligible,
+                selected_regions=profile.geo_regions,
+                excluded_countries=profile.geo_excluded,
+            )
 
         if len(eligible) < 4:
-            raise HTTPException(400, "Too few eligible assets after exclusions. Please relax constraints.")
+            raise HTTPException(400, "Too few eligible assets after exclusions. Please relax geographic or sector constraints.")
 
         # Fetch live market data
         logger.info(f"Fetching live data for {eligible}")
@@ -101,16 +113,23 @@ def generate_portfolio(profile: UserProfile):
         ranked = rank_etfs(market_data, corr_matrix, forecasts=forecasts, fundamentals=fundamentals)
 
         # Optimize using forecast returns + Ledoit-Wolf covariance
+        geo_constraints = build_geo_constraints(
+            list(market_data.keys()),
+            geo_min={k: v / 100 for k, v in profile.geo_min.items()},
+            geo_max={k: v / 100 for k, v in profile.geo_max.items()},
+        )
+
         result = optimize_portfolio(
             market_data=market_data,
             cov_matrix=cov_matrix,
             user_risk_pct=profile.risk_tolerance / 100,
             goal=profile.goal,
-            max_weight=0.25,
+            max_weight=0.10,
             min_assets=4,
             method="mpt",
             forecasts=forecasts,
             max_drawdown_pct=profile.max_drawdown,
+            extra_constraints=geo_constraints,
         )
 
         # Dollar allocations — optimal portfolio
@@ -125,7 +144,7 @@ def generate_portfolio(profile: UserProfile):
             market_data=market_data,
             cov_matrix=cov_matrix,
             target_vol=profile.risk_tolerance / 100,
-            max_weight=0.25,
+            max_weight=0.10,
             min_assets=4,
             forecasts=forecasts,
         )
@@ -165,6 +184,8 @@ def generate_portfolio(profile: UserProfile):
             excluded_tickers=excluded_by_user,
         )
 
+        geo_exposure = compute_geo_exposure(dollar_allocs)
+
         return {
             "portfolio": {
                 **result,
@@ -174,6 +195,7 @@ def generate_portfolio(profile: UserProfile):
                 **target_result,
                 "allocations": target_dollar_allocs,
             },
+            "geo_exposure": geo_exposure,
             "data_source": data_source,
             "data_as_of": data_as_of,
             "dominant_regime": dominant_regime,
