@@ -3,16 +3,29 @@ import { rebalancePortfolio } from '../api'
 
 const fmtDollar = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 
-function recommendedDrift(horizon) {
+function recommendedDrift(horizon, vol) {
   const h = parseFloat(horizon) || 5
-  if (h < 0.5)  return { pct: 2,  reason: 'Short horizon — tight control needed' }
-  if (h < 1)    return { pct: 3,  reason: 'Under 1 year — rebalance frequently' }
-  if (h < 3)    return { pct: 5,  reason: 'Medium-term — standard threshold' }
-  if (h < 7)    return { pct: 7,  reason: 'Long-term — allow more natural drift' }
-  return        { pct: 10, reason: 'Very long horizon — rebalance sparingly' }
+  const v = parseFloat(vol) || 15
+
+  // Base from horizon
+  let base = h < 0.5 ? 2 : h < 1 ? 3 : h < 3 ? 5 : h < 7 ? 7 : 10
+
+  // Vol adjustment: high vol → tighter (drift happens faster); low vol → looser
+  let volAdj = 0
+  if (v >= 20) volAdj = -2
+  else if (v >= 15) volAdj = -1
+  else if (v <= 5) volAdj = +2
+  else if (v <= 8) volAdj = +1
+
+  const pct = Math.max(2, Math.min(12, base + volAdj))
+
+  const horizonDesc = h < 0.5 ? 'short horizon' : h < 1 ? 'sub-year horizon' : h < 3 ? 'medium-term' : h < 7 ? 'long-term' : 'very long horizon'
+  const volDesc = v >= 20 ? 'high vol — tighter control' : v <= 8 ? 'low vol — more tolerance' : `${v}% vol`
+
+  return { pct, reason: `${horizonDesc}, ${volDesc}` }
 }
 
-export default function RebalancingPanel({ targetAllocations, portfolioValue, horizon }) {
+export default function RebalancingPanel({ targetAllocations, portfolioValue, horizon, vol }) {
   const [holdings, setHoldings] = useState(
     targetAllocations.map(a => ({ ticker: a.ticker, current_value: a.dollar_amount }))
   )
@@ -77,7 +90,7 @@ export default function RebalancingPanel({ targetAllocations, portfolioValue, ho
           <div className="form-group">
             <label style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px' }}>Drift Threshold (%)</label>
             <input type="number" min="1" max="20" value={threshold} onChange={e => setThreshold(e.target.value)} />
-            {(() => { const rec = recommendedDrift(horizon); return (
+            {(() => { const rec = recommendedDrift(horizon, vol); return (
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
                 Recommended: <strong style={{ color: 'var(--accent)', cursor: 'pointer' }}
                   onClick={() => setThreshold(rec.pct)}>{rec.pct}%</strong> — {rec.reason}

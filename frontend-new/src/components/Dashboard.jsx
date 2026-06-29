@@ -224,6 +224,7 @@ export default function Dashboard({ data }) {
           targetAllocations={portfolio.allocations}
           portfolioValue={userProfile.investment_amount}
           horizon={userProfile.horizon}
+          vol={userProfile.risk_tolerance}
         />
       )}
 

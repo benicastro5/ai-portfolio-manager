@@ -105,6 +105,7 @@ def generate_portfolio(profile: UserProfile):
             min_assets=4,
             method="mpt",
             forecasts=forecasts,
+            max_drawdown_pct=profile.max_drawdown,
         )
 
         # Dollar allocations — optimal portfolio

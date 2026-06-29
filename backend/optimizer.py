@@ -27,7 +27,8 @@ def optimize_portfolio(
     min_assets: int = 4,
     scores: dict = None,
     method: str = "mpt",
-    forecasts: dict = None,     # from forecast_engine.ensemble_forecast()
+    forecasts: dict = None,
+    max_drawdown_pct: float = None,   # e.g. -20 means max -20% drawdown
 ) -> dict:
     tickers = [t for t in market_data.keys() if t in cov_matrix.columns]
     n = len(tickers)
@@ -55,7 +56,11 @@ def optimize_portfolio(
     lw_cov = ledoit_wolf_cov(market_data, tickers)
     cov = lw_cov if lw_cov is not None else cov_matrix.loc[tickers, tickers].values
 
-    weights = _mpt_optimize(expected_returns, cov, user_risk_pct, goal, max_weight, min_assets)
+    # Derive vol ceiling from max_drawdown: DD ≈ vol * 2.33 (Cornish-Fisher, 95th pctile)
+    dd_vol_ceiling = abs(max_drawdown_pct) / 100 / 2.33 if max_drawdown_pct else None
+    effective_vol = min(user_risk_pct, dd_vol_ceiling) if dd_vol_ceiling else user_risk_pct
+
+    weights = _mpt_optimize(expected_returns, cov, effective_vol, goal, max_weight, min_assets, dd_vol_ceiling)
     weights = np.maximum(weights, 0)
     weights = weights / weights.sum()
 
@@ -251,6 +256,7 @@ def _mpt_optimize(
     goal: str,
     max_weight: float,
     min_assets: int,
+    dd_vol_ceiling: float = None,
 ) -> np.ndarray:
     n = len(expected_returns)
 
@@ -299,6 +305,13 @@ def _mpt_optimize(
         constraints.append({
             "type": "ineq",
             "fun": lambda w: np.sqrt(w @ cov @ w) - target_vol * 0.80
+        })
+
+    # Hard drawdown ceiling: always enforce regardless of goal
+    if dd_vol_ceiling is not None:
+        constraints.append({
+            "type": "ineq",
+            "fun": lambda w: dd_vol_ceiling - np.sqrt(w @ cov @ w)
         })
 
     bounds = [(0.0, max_weight)] * n
