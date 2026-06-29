@@ -10,6 +10,7 @@ All values are cached for the lifetime of the request — this module is statele
 import yfinance as yf
 import numpy as np
 import logging
+from market_data import _cache_get, _cache_set, _FUND_TTL
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,10 @@ def fetch_fundamentals(tickers: list[str]) -> dict:
 
 def _fetch_etf_fundamentals(ticker: str) -> dict:
     """Fetch per-ETF fundamental data from yfinance .info dict."""
+    cached = _cache_get(f"fund:{ticker}", _FUND_TTL)
+    if cached:
+        return cached
+
     ac = ASSET_CLASS.get(ticker, "equity")
     out = {
         "pe_ratio": None,
@@ -90,6 +95,7 @@ def _fetch_etf_fundamentals(ticker: str) -> dict:
     except Exception as e:
         logger.debug(f"Fundamentals fetch failed for {ticker}: {e}")
 
+    _cache_set(f"fund:{ticker}", out)
     return out
 
 

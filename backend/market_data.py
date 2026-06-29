@@ -2,10 +2,30 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from typing import Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 import logging
 
 logger = logging.getLogger(__name__)
+
+# ── In-memory cache ───────────────────────────────────────────────────────────
+# Market data: refreshed every 60 minutes
+# Fundamentals: refreshed every 24 hours
+_cache: dict = {}          # ticker -> {data, fetched_at}
+_cache_lock = threading.Lock()
+_PRICE_TTL = 3600          # 1 hour
+_FUND_TTL  = 86400         # 24 hours
+
+def _cache_get(key: str, ttl: int):
+    with _cache_lock:
+        entry = _cache.get(key)
+        if entry and (datetime.now() - entry["fetched_at"]).total_seconds() < ttl:
+            return entry["data"]
+    return None
+
+def _cache_set(key: str, data):
+    with _cache_lock:
+        _cache[key] = {"data": data, "fetched_at": datetime.now()}
 
 ETF_UNIVERSE = {
     # ── Broad Market ──────────────────────────────────────────────
@@ -177,47 +197,71 @@ def _download_batch(tickers: list[str], start: str, end: str) -> pd.DataFrame:
     return close.dropna(how="all")
 
 
+def _fetch_single_ticker(ticker: str, start_str: str, end_str: str):
+    """Fetch + compute metrics for one ticker. Returns (ticker, data)."""
+    cached = _cache_get(f"price:{ticker}", _PRICE_TTL)
+    if cached:
+        return ticker, cached
+    try:
+        close = _download_batch([ticker], start_str, end_str)
+        if close.empty or ticker not in close.columns:
+            data = _mock_data(ticker)
+        else:
+            series = close[ticker].dropna()
+            if len(series) < 20:
+                data = _mock_data(ticker)
+            else:
+                monthly_prices = series.resample("ME").last()
+                monthly_returns = monthly_prices.pct_change().dropna()
+                if len(monthly_returns) < 12:
+                    data = _mock_data(ticker)
+                else:
+                    data = _compute_metrics(ticker, monthly_returns, monthly_prices)
+    except Exception as e:
+        logger.warning(f"Fetch failed for {ticker}: {e}")
+        data = _mock_data(ticker)
+    _cache_set(f"price:{ticker}", data)
+    return ticker, data
+
+
 def fetch_market_data(tickers: list[str], period_years: int = 3) -> dict:
     end_date = datetime.now()
     start_date = end_date - timedelta(days=365 * period_years)
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
 
-    BATCH = 8   # download in groups of 8 to avoid yfinance bulk-download glitches
-    all_prices: dict[str, pd.Series] = {}
-
-    for i in range(0, len(tickers), BATCH):
-        batch = tickers[i: i + BATCH]
-        try:
-            close = _download_batch(batch, start_str, end_str)
-            if close.empty:
-                continue
-            for t in batch:
-                if t in close.columns:
-                    series = close[t].dropna()
-                    if len(series) > 20:
-                        all_prices[t] = series
-        except Exception as e:
-            logger.warning(f"Batch {batch} failed: {e}")
-
     result = {}
-    for ticker in tickers:
-        if ticker not in all_prices:
-            result[ticker] = _mock_data(ticker)
-            continue
-        prices_series = all_prices[ticker]
-        monthly_prices = prices_series.resample("ME").last()
-        monthly_returns = monthly_prices.pct_change().dropna()
-        if len(monthly_returns) < 12:
-            result[ticker] = _mock_data(ticker)
-            continue
-        try:
-            result[ticker] = _compute_metrics(ticker, monthly_returns, monthly_prices)
-        except Exception as e:
-            logger.warning(f"Metrics failed for {ticker}: {e}")
-            result[ticker] = _mock_data(ticker)
+    # Serve cached tickers immediately; collect uncached ones for parallel fetch
+    uncached = []
+    for t in tickers:
+        cached = _cache_get(f"price:{t}", _PRICE_TTL)
+        if cached:
+            result[t] = cached
+        else:
+            uncached.append(t)
+
+    if uncached:
+        logger.info(f"Cache miss for {len(uncached)} tickers, fetching in parallel...")
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {executor.submit(_fetch_single_ticker, t, start_str, end_str): t for t in uncached}
+            for future in as_completed(futures):
+                try:
+                    ticker, data = future.result()
+                    result[ticker] = data
+                except Exception as e:
+                    t = futures[future]
+                    logger.warning(f"Parallel fetch failed for {t}: {e}")
+                    result[t] = _mock_data(t)
 
     return result
+
+
+def prewarm_cache():
+    """Pre-fetch all tickers on server startup so the first user request is fast."""
+    logger.info("Pre-warming market data cache for all tickers...")
+    all_tickers = list(ETF_UNIVERSE.keys())
+    fetch_market_data(all_tickers, period_years=3)
+    logger.info(f"Cache pre-warm complete — {len(all_tickers)} tickers cached.")
 
 
 def _compute_metrics(ticker: str, returns: pd.Series, prices: pd.Series) -> dict:

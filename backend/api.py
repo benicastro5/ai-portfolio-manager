@@ -17,11 +17,18 @@ from fundamentals import fetch_fundamentals, score_fundamentals
 from geography import filter_by_geography, build_geo_constraints, compute_geo_exposure
 from stress_test import run_stress_tests
 from health_score import compute_health_score
+import threading
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Institutional Portfolio Manager", version="1.0.0")
+
+@app.on_event("startup")
+async def startup_prewarm():
+    """Pre-warm the market data cache in the background on server start."""
+    from market_data import prewarm_cache
+    threading.Thread(target=prewarm_cache, daemon=True).start()
 
 app.add_middleware(
     CORSMiddleware,
