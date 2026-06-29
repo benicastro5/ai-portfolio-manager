@@ -85,8 +85,15 @@ export default function OnboardingForm({ onSubmit, loading, error }) {
             <input type="range" min="0.25" max="30" step="0.25" value={form.horizon}
               onChange={e => set('horizon', e.target.value)} required
               style={{ width: '100%', accentColor: 'var(--accent)' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              <span>3 months</span><span>5 years</span><span>10 years</span><span>30 years</span>
+            <div style={{ position: 'relative', height: '18px', marginTop: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+              {[{ label: '3m', val: 0.25 }, { label: '1y', val: 1 }, { label: '5y', val: 5 }, { label: '10y', val: 10 }, { label: '20y', val: 20 }, { label: '30y', val: 30 }].map(({ label, val }) => {
+                const pct = ((val - 0.25) / (30 - 0.25)) * 100
+                return (
+                  <span key={label} style={{ position: 'absolute', left: `${pct}%`, transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>
+                    {label}
+                  </span>
+                )
+              })}
             </div>
           </div>
 
