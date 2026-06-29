@@ -62,6 +62,13 @@ def optimize_portfolio(
 
     weights = _mpt_optimize(expected_returns, cov, effective_vol, goal, max_weight, min_assets, dd_vol_ceiling)
     weights = np.maximum(weights, 0)
+
+    # Trim to top 10 holdings and renormalize
+    MAX_ASSETS = 10
+    if np.sum(weights > 0.001) > MAX_ASSETS:
+        threshold = np.sort(weights)[-MAX_ASSETS]
+        weights = np.where(weights >= threshold, weights, 0.0)
+
     weights = weights / weights.sum()
 
     port_return = float(expected_returns @ weights)
@@ -196,6 +203,13 @@ def optimize_target_vol_portfolio(
         best_actual_vol = float(np.sqrt(best_weights @ cov @ best_weights))
 
     weights = best_weights
+    # Trim to top 10 holdings
+    MAX_ASSETS = 10
+    if np.sum(weights > 0.001) > MAX_ASSETS:
+        threshold = np.sort(weights)[-MAX_ASSETS]
+        weights = np.where(weights >= threshold, weights, 0.0)
+    weights = weights / weights.sum()
+
     port_return = float(expected_returns @ weights)
     port_vol = float(np.sqrt(weights @ cov @ weights))
     sharpe = (port_return - RF_RATE) / port_vol if port_vol > 0 else 0
