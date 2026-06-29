@@ -2,7 +2,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import logging
 
@@ -197,41 +196,14 @@ def _download_batch(tickers: list[str], start: str, end: str) -> pd.DataFrame:
     return close.dropna(how="all")
 
 
-def _fetch_single_ticker(ticker: str, start_str: str, end_str: str):
-    """Fetch + compute metrics for one ticker. Returns (ticker, data)."""
-    cached = _cache_get(f"price:{ticker}", _PRICE_TTL)
-    if cached:
-        return ticker, cached
-    try:
-        close = _download_batch([ticker], start_str, end_str)
-        if close.empty or ticker not in close.columns:
-            data = _mock_data(ticker)
-        else:
-            series = close[ticker].dropna()
-            if len(series) < 20:
-                data = _mock_data(ticker)
-            else:
-                monthly_prices = series.resample("ME").last()
-                monthly_returns = monthly_prices.pct_change().dropna()
-                if len(monthly_returns) < 12:
-                    data = _mock_data(ticker)
-                else:
-                    data = _compute_metrics(ticker, monthly_returns, monthly_prices)
-    except Exception as e:
-        logger.warning(f"Fetch failed for {ticker}: {e}")
-        data = _mock_data(ticker)
-    _cache_set(f"price:{ticker}", data)
-    return ticker, data
-
-
 def fetch_market_data(tickers: list[str], period_years: int = 3) -> dict:
     end_date = datetime.now()
     start_date = end_date - timedelta(days=365 * period_years)
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
 
+    # Serve fully cached tickers immediately
     result = {}
-    # Serve cached tickers immediately; collect uncached ones for parallel fetch
     uncached = []
     for t in tickers:
         cached = _cache_get(f"price:{t}", _PRICE_TTL)
@@ -240,18 +212,56 @@ def fetch_market_data(tickers: list[str], period_years: int = 3) -> dict:
         else:
             uncached.append(t)
 
-    if uncached:
-        logger.info(f"Cache miss for {len(uncached)} tickers, fetching in parallel...")
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            futures = {executor.submit(_fetch_single_ticker, t, start_str, end_str): t for t in uncached}
-            for future in as_completed(futures):
-                try:
-                    ticker, data = future.result()
-                    result[ticker] = data
-                except Exception as e:
-                    t = futures[future]
-                    logger.warning(f"Parallel fetch failed for {t}: {e}")
-                    result[t] = _mock_data(t)
+    if not uncached:
+        logger.info("All tickers served from cache.")
+        return result
+
+    # ONE bulk download for all uncached tickers — single HTTP round-trip
+    logger.info(f"Bulk downloading {len(uncached)} tickers in one request...")
+    import warnings
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if len(uncached) == 1:
+                raw = yf.download(uncached[0], start=start_str, end=end_str,
+                                  progress=False, auto_adjust=True)
+                if not raw.empty:
+                    raw.columns = pd.MultiIndex.from_tuples(
+                        [(c, uncached[0]) for c in raw.columns])
+            else:
+                raw = yf.download(uncached, start=start_str, end=end_str,
+                                  progress=False, auto_adjust=True, group_by="ticker")
+    except Exception as e:
+        logger.warning(f"Bulk download failed: {e}. Falling back to mock data.")
+        raw = pd.DataFrame()
+
+    # Extract per-ticker Close series from the multi-level DataFrame
+    all_prices: dict[str, pd.Series] = {}
+    if not raw.empty:
+        for t in uncached:
+            try:
+                if len(uncached) == 1:
+                    series = raw["Close"].dropna() if "Close" in raw.columns else pd.Series()
+                else:
+                    series = raw[t]["Close"].dropna() if t in raw.columns.get_level_values(0) else pd.Series()
+                if len(series) > 20:
+                    all_prices[t] = series
+            except Exception:
+                pass
+
+    # Compute metrics for successfully downloaded tickers
+    for t in uncached:
+        if t not in all_prices:
+            data = _mock_data(t)
+        else:
+            try:
+                monthly_prices = all_prices[t].resample("ME").last()
+                monthly_returns = monthly_prices.pct_change().dropna()
+                data = _compute_metrics(t, monthly_returns, monthly_prices) if len(monthly_returns) >= 12 else _mock_data(t)
+            except Exception:
+                data = _mock_data(t)
+        _cache_set(f"price:{t}", data)
+        result[t] = data
 
     return result
 

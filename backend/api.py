@@ -114,12 +114,8 @@ def generate_portfolio(profile: UserProfile):
         logger.info("Running ensemble forecast models")
         forecasts = ensemble_forecast(market_data)
 
-        # Fundamental data (P/E, P/B, dividend yield, earnings growth, macro)
-        raw_fundamentals = fetch_fundamentals(list(market_data.keys()))
-        fundamentals = {t: score_fundamentals(t, raw_fundamentals[t]) for t in raw_fundamentals}
-
-        # Score and rank (use forecast returns for scoring)
-        ranked = rank_etfs(market_data, corr_matrix, forecasts=forecasts, fundamentals=fundamentals)
+        # Score and rank WITHOUT fundamentals first (fast)
+        ranked = rank_etfs(market_data, corr_matrix, forecasts=forecasts, fundamentals={})
 
         # Optimize using forecast returns + Ledoit-Wolf covariance
         geo_constraints = build_geo_constraints(
@@ -140,6 +136,14 @@ def generate_portfolio(profile: UserProfile):
             max_drawdown_pct=profile.max_drawdown,
             extra_constraints=geo_constraints,
         )
+
+        # Fetch fundamentals ONLY for the final portfolio holdings (~10 tickers)
+        final_tickers = [a["ticker"] for a in result["allocations"]]
+        logger.info(f"Fetching fundamentals for {len(final_tickers)} final holdings")
+        raw_fundamentals = fetch_fundamentals(final_tickers)
+        fundamentals = {t: score_fundamentals(t, raw_fundamentals[t]) for t in raw_fundamentals}
+        # Re-rank with fundamentals for the ETF ranking tab
+        ranked = rank_etfs(market_data, corr_matrix, forecasts=forecasts, fundamentals=fundamentals)
 
         # Dollar allocations — optimal portfolio
         dollar_allocs = compute_dollar_allocations(
