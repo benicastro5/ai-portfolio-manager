@@ -63,11 +63,13 @@ def optimize_portfolio(
     weights = _mpt_optimize(expected_returns, cov, effective_vol, goal, max_weight, min_assets, dd_vol_ceiling)
     weights = np.maximum(weights, 0)
 
-    # Trim to top 10 holdings and renormalize
+    # Trim to exactly top 10 holdings by weight, then renormalize
     MAX_ASSETS = 10
     if np.sum(weights > 0.001) > MAX_ASSETS:
-        threshold = np.sort(weights)[-MAX_ASSETS]
-        weights = np.where(weights >= threshold, weights, 0.0)
+        top_indices = np.argsort(weights)[-MAX_ASSETS:]
+        mask = np.zeros(len(weights), dtype=bool)
+        mask[top_indices] = True
+        weights = np.where(mask, weights, 0.0)
 
     weights = weights / weights.sum()
 
@@ -203,11 +205,13 @@ def optimize_target_vol_portfolio(
         best_actual_vol = float(np.sqrt(best_weights @ cov @ best_weights))
 
     weights = best_weights
-    # Trim to top 10 holdings
+    # Trim to exactly top 10 holdings
     MAX_ASSETS = 10
     if np.sum(weights > 0.001) > MAX_ASSETS:
-        threshold = np.sort(weights)[-MAX_ASSETS]
-        weights = np.where(weights >= threshold, weights, 0.0)
+        top_indices = np.argsort(weights)[-MAX_ASSETS:]
+        mask = np.zeros(len(weights), dtype=bool)
+        mask[top_indices] = True
+        weights = np.where(mask, weights, 0.0)
     weights = weights / weights.sum()
 
     port_return = float(expected_returns @ weights)
