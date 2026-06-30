@@ -1,12 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 import logging
+import os
 
+import time
 from market_data import (
     fetch_market_data, get_covariance_matrix, get_correlation_matrix,
-    filter_by_exclusions, ETF_UNIVERSE,
+    filter_by_exclusions, ETF_UNIVERSE, GOAL_UNIVERSE,
+    load_cache_from_disk, refresh_all_cache,
 )
 from scoring_engine import rank_etfs
 from optimizer import optimize_portfolio, optimize_target_vol_portfolio, compute_efficient_frontier
@@ -24,13 +27,28 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Institutional Portfolio Manager", version="1.0.0")
 
+ADMIN_REFRESH_KEY = os.environ.get("ADMIN_REFRESH_KEY", "")
+
 @app.on_event("startup")
 async def startup_prewarm():
-    """Pre-warm market data cache in background — does not block startup."""
+    """Load any disk-cached data, then top up in background — does not block startup."""
     from market_data import prewarm_cache
+    load_cache_from_disk()
     t = threading.Thread(target=prewarm_cache, daemon=True)
     t.start()
     logger.info("Cache pre-warm started in background thread.")
+
+
+@app.post("/admin/refresh-cache")
+def admin_refresh_cache(x_admin_key: str = Header(default="")):
+    """Force a full re-download of all tickers and persist to disk.
+    Call this once per morning via an external scheduler (cron-job.org, GitHub Actions, etc.)
+    so every user request during the day hits a warm cache instead of downloading live."""
+    if not ADMIN_REFRESH_KEY or x_admin_key != ADMIN_REFRESH_KEY:
+        raise HTTPException(403, "Invalid or missing admin key")
+    t = threading.Thread(target=refresh_all_cache, daemon=True)
+    t.start()
+    return {"status": "refresh started"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -85,9 +103,16 @@ def get_etfs():
 @app.post("/portfolio/generate")
 def generate_portfolio(profile: UserProfile):
     try:
+        t0 = time.time()
+
+        # Goal-based pre-filter: only download tickers relevant to this goal
+        goal_tickers = GOAL_UNIVERSE.get(profile.goal, ALL_TICKERS)
+        # Still allow user's geographic ETFs (they may be outside the goal universe)
+        candidate_pool = list(dict.fromkeys(goal_tickers + ALL_TICKERS[:45]))  # goal + all core ETFs
+
         # Filter universe: sector/asset exclusions first, then geography
         eligible = filter_by_exclusions(
-            ALL_TICKERS,
+            candidate_pool,
             excluded_sectors=profile.excluded_sectors,
             excluded_assets=profile.excluded_assets,
         )
@@ -102,24 +127,31 @@ def generate_portfolio(profile: UserProfile):
             raise HTTPException(400, "Too few eligible assets after exclusions. Please relax geographic or sector constraints.")
 
         # Fetch live market data
-        logger.info(f"Fetching live data for {eligible}")
+        logger.info(f"[TIMING] Fetching {len(eligible)} tickers (goal={profile.goal})")
+        t1 = time.time()
         market_data = fetch_market_data(eligible, period_years=3)
+        logger.info(f"[TIMING] market_data fetch: {time.time()-t1:.1f}s")
         live_count = sum(1 for d in market_data.values() if d.get("dates"))
         data_source = "live" if live_count == len(eligible) else f"live ({live_count}/{len(eligible)}), mock fallback for rest"
         data_as_of = __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
         # Matrices
+        t2 = time.time()
         cov_matrix = get_covariance_matrix(market_data)
         corr_matrix = get_correlation_matrix(market_data)
+        logger.info(f"[TIMING] covariance matrices: {time.time()-t2:.1f}s")
 
         # Ensemble forecast (GARCH + EWMA + Momentum + Mean-Reversion + J-S shrinkage)
+        t3 = time.time()
         logger.info("Running ensemble forecast models")
         forecasts = ensemble_forecast(market_data)
+        logger.info(f"[TIMING] ensemble forecast: {time.time()-t3:.1f}s")
 
         # Score and rank WITHOUT fundamentals first (fast)
         ranked = rank_etfs(market_data, corr_matrix, forecasts=forecasts, fundamentals={})
 
         # Optimize using forecast returns + Ledoit-Wolf covariance
+        t4 = time.time()
         geo_constraints = build_geo_constraints(
             list(market_data.keys()),
             geo_min={k: v / 100 for k, v in profile.geo_min.items()},
@@ -138,12 +170,15 @@ def generate_portfolio(profile: UserProfile):
             max_drawdown_pct=profile.max_drawdown,
             extra_constraints=geo_constraints,
         )
+        logger.info(f"[TIMING] optimization: {time.time()-t4:.1f}s")
 
         # Fetch fundamentals ONLY for the final portfolio holdings (~10 tickers)
+        t5 = time.time()
         final_tickers = [a["ticker"] for a in result["allocations"]]
         logger.info(f"Fetching fundamentals for {len(final_tickers)} final holdings")
         raw_fundamentals = fetch_fundamentals(final_tickers)
         fundamentals = {t: score_fundamentals(t, raw_fundamentals[t]) for t in raw_fundamentals}
+        logger.info(f"[TIMING] fundamentals: {time.time()-t5:.1f}s")
         # Re-rank with fundamentals for the ETF ranking tab
         ranked = rank_etfs(market_data, corr_matrix, forecasts=forecasts, fundamentals=fundamentals)
 
@@ -231,6 +266,8 @@ def generate_portfolio(profile: UserProfile):
                 "sharpe": round(((spy_ret * 0.6 + bnd_ret * 0.4) - 0.045) / (spy_vol * 0.6 + bnd_vol * 0.4), 2) if spy_vol else 0,
             },
         }
+
+        logger.info(f"[TIMING] total generate_portfolio: {time.time()-t0:.1f}s")
 
         return {
             "portfolio": {

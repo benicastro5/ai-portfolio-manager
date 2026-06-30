@@ -383,6 +383,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
       {tab === 'rebalance' && (
         <RebalancingPanel
           targetAllocations={portfolio.allocations}
+          targetVolAllocations={target_vol_portfolio?.allocations}
           portfolioValue={userProfile.investment_amount}
           horizon={userProfile.horizon}
           vol={userProfile.risk_tolerance}

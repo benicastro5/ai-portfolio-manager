@@ -1,4 +1,4 @@
-﻿/* Reset & Base */
+/* Reset & Base */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
   --bg: #f8f9fc; --surface: #ffffff; --surface2: #f1f4f9; --border: #e2e8f0;

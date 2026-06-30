@@ -1,0 +1,17 @@
+name: Refresh market data cache
+
+on:
+  schedule:
+    # 11:00 UTC = 6:00am ET (7:00am during EST) — before US market open, weekdays only
+    - cron: '0 11 * * 1-5'
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger backend cache refresh
+        run: |
+          curl -sf -X POST "${{ secrets.BACKEND_URL }}/admin/refresh-cache" \
+            -H "x-admin-key: ${{ secrets.ADMIN_REFRESH_KEY }}" \
+            --max-time 30

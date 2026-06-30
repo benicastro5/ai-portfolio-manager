@@ -4,16 +4,49 @@ import numpy as np
 from datetime import datetime, timedelta
 import threading
 import logging
+import json
+import os
 
 logger = logging.getLogger(__name__)
 
 # ── In-memory cache ───────────────────────────────────────────────────────────
-# Market data: refreshed every 60 minutes
+# Prices only need daily granularity (EOD close) — cache for most of a day so
+# the morning refresh job is the only thing that re-downloads.
 # Fundamentals: refreshed every 24 hours
 _cache: dict = {}          # ticker -> {data, fetched_at}
 _cache_lock = threading.Lock()
-_PRICE_TTL = 3600          # 1 hour
+_PRICE_TTL = 23 * 3600     # ~23 hours — one fresh download per day
 _FUND_TTL  = 86400         # 24 hours
+
+# Disk snapshot so cache survives a server restart (Render free-tier cold
+# starts may or may not preserve the filesystem, but this is free insurance —
+# worst case it's a no-op and we fall back to live download).
+_CACHE_FILE = os.path.join(os.path.dirname(__file__), "_data_cache.json")
+
+
+def save_cache_to_disk():
+    with _cache_lock:
+        snapshot = {k: {"data": v["data"], "fetched_at": v["fetched_at"].isoformat()} for k, v in _cache.items()}
+    try:
+        with open(_CACHE_FILE, "w") as f:
+            json.dump(snapshot, f)
+        logger.info(f"Saved {len(snapshot)} cache entries to disk.")
+    except Exception as e:
+        logger.warning(f"Failed to save cache to disk: {e}")
+
+
+def load_cache_from_disk():
+    if not os.path.exists(_CACHE_FILE):
+        return
+    try:
+        with open(_CACHE_FILE) as f:
+            snapshot = json.load(f)
+        with _cache_lock:
+            for k, v in snapshot.items():
+                _cache[k] = {"data": v["data"], "fetched_at": datetime.fromisoformat(v["fetched_at"])}
+        logger.info(f"Loaded {len(snapshot)} cache entries from disk.")
+    except Exception as e:
+        logger.warning(f"Failed to load cache from disk: {e}")
 
 def _cache_get(key: str, ttl: int):
     with _cache_lock:
@@ -275,12 +308,88 @@ def fetch_market_data(tickers: list[str], period_years: int = 3) -> dict:
     return result
 
 
+# ── Goal-based universe: only download tickers relevant to each goal ──────────
+# Reduces cold-start downloads from 125 → 22-55 tickers depending on goal.
+GOAL_UNIVERSE: dict[str, list[str]] = {
+    "capital_preservation": [
+        "BND", "TLT", "SHY", "TIP", "LQD",
+        "GLD", "SLV", "DBC",
+        "XLP", "XLU", "XLV",
+        "SPY", "EFA",
+        "VNQ",
+        "KO", "PEP", "PG", "JNJ", "WMT", "COST",
+        "T", "VZ", "NEM",
+    ],
+    "income": [
+        "BND", "TLT", "LQD", "HYG", "TIP", "SHY",
+        "SPY", "XLP", "XLU", "XLV", "VNQ",
+        "KO", "PEP", "PG", "JNJ", "PFE", "ABT",
+        "T", "VZ", "TMUS",
+        "XOM", "CVX",
+        "WMT", "COST", "MCD", "HD",
+        "JPM", "BAC", "MS", "AXP",
+        "GLD", "DBC",
+        "PLD", "AMT", "EQIX", "NEM",
+    ],
+    "balanced": [
+        "SPY", "QQQ", "IWM", "XLK", "XLF", "XLV", "XLP", "XLU", "XLI", "EFA", "EEM",
+        "BND", "TLT", "LQD", "HYG", "TIP", "SHY",
+        "GLD", "VNQ", "DBC",
+        "AAPL", "MSFT", "GOOGL", "META", "AMZN",
+        "JPM", "BAC", "V", "MA", "BRK-B",
+        "JNJ", "UNH", "LLY", "PFE",
+        "WMT", "COST", "PG", "KO", "PEP",
+        "XOM", "CVX",
+        "CAT", "HON", "UPS",
+        "T", "VZ", "TMUS",
+        "NVO", "TSM", "PLD", "AMT",
+    ],
+    "growth": [
+        "SPY", "QQQ", "IWM", "XLK", "XLF", "XLE", "XLV", "XLY", "XLI", "XLC", "SOXX", "IBB",
+        "EFA", "EEM", "GLD",
+        "AAPL", "MSFT", "NVDA", "GOOGL", "META", "AMZN", "TSLA", "AVGO", "ORCL", "CRM",
+        "AMD", "ADBE", "NOW", "UBER", "NFLX", "SPOT",
+        "JPM", "GS", "MS", "V", "MA", "BLK",
+        "LLY", "UNH", "TMO", "ISRG",
+        "CAT", "HON", "GE",
+        "TSM", "ASML", "NVO",
+        "PLD", "AMT", "EQIX",
+    ],
+}
+
+# Core ETFs always pre-warmed on startup (no stocks — fast 15-20s prewarm)
+_CORE_ETF_TICKERS = [
+    "SPY", "QQQ", "IWM", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLU", "XLB", "XLC",
+    "SOXX", "IBB", "EFA", "EEM",
+    "BND", "TLT", "HYG", "LQD", "SHY", "TIP",
+    "GLD", "SLV", "USO", "DBC", "VNQ",
+    "VT", "ACWI", "VGK", "EWJ", "MCHI", "INDA", "EWZ", "EWC", "EWY", "EWT", "EWA",
+    "ECH", "EWW", "EZA", "EIDO", "EWM", "EWU",
+]
+
+
+# Every ticker any goal profile could request — this is what the morning
+# refresh job downloads so all users get cache hits all day.
+ALL_RELEVANT_TICKERS = sorted(set(_CORE_ETF_TICKERS) | set().union(*GOAL_UNIVERSE.values()))
+
+
 def prewarm_cache():
-    """Pre-fetch all tickers on server startup so the first user request is fast."""
-    logger.info("Pre-warming market data cache for all tickers...")
-    all_tickers = list(ETF_UNIVERSE.keys())
-    fetch_market_data(all_tickers, period_years=3)
-    logger.info(f"Cache pre-warm complete — {len(all_tickers)} tickers cached.")
+    """Pre-fetch core ETFs on startup; stocks are fetched on-demand per goal."""
+    logger.info(f"Pre-warming cache for {len(_CORE_ETF_TICKERS)} core ETFs...")
+    fetch_market_data(_CORE_ETF_TICKERS, period_years=3)
+    logger.info("Core ETF cache pre-warm complete.")
+
+
+def refresh_all_cache():
+    """Force a fresh download of every ticker any goal could need, then persist to disk.
+    Intended to be triggered once per morning by an external scheduler."""
+    logger.info(f"Full refresh starting for {len(ALL_RELEVANT_TICKERS)} tickers...")
+    with _cache_lock:
+        for t in ALL_RELEVANT_TICKERS:
+            _cache.pop(f"price:{t}", None)
+    fetch_market_data(ALL_RELEVANT_TICKERS, period_years=3)
+    save_cache_to_disk()
+    logger.info("Full refresh complete — cache saved to disk.")
 
 
 def _compute_metrics(ticker: str, returns: pd.Series, prices: pd.Series) -> dict:

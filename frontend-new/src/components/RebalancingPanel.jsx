@@ -25,14 +25,25 @@ function recommendedDrift(horizon, vol) {
   return { pct, reason: `${horizonDesc}, ${volDesc}` }
 }
 
-export default function RebalancingPanel({ targetAllocations, portfolioValue, horizon, vol }) {
-  const [holdings, setHoldings] = useState(
-    targetAllocations.map(a => ({ ticker: a.ticker, current_value: a.dollar_amount }))
-  )
+export default function RebalancingPanel({ targetAllocations, targetVolAllocations, portfolioValue, horizon, vol }) {
+  const buildHoldings = (allocs) =>
+    allocs.map(a => ({ ticker: a.ticker, current_value: a.dollar_amount }))
+
+  const [holdings, setHoldings] = useState(buildHoldings(targetAllocations))
+  const [activeSource, setActiveSource] = useState('optimal')
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [threshold, setThreshold] = useState(5)
   const [totalValue, setTotalValue] = useState(portfolioValue)
+
+  const prefill = (source) => {
+    const allocs = source === 'optimal' ? targetAllocations : targetVolAllocations
+    const h = buildHoldings(allocs)
+    setHoldings(h)
+    setTotalValue(h.reduce((sum, x) => sum + (Number(x.current_value) || 0), 0))
+    setActiveSource(source)
+    setResult(null)
+  }
 
   const updateHolding = (ticker, val) => {
     setHoldings(h => {
@@ -67,9 +78,51 @@ export default function RebalancingPanel({ targetAllocations, portfolioValue, ho
     <div>
       <div className="card" style={{ marginBottom: '20px' }}>
         <div className="card-title">Current Holdings</div>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-          Enter your current holding values to see rebalancing recommendations. Pre-filled with target allocations as a starting point.
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+          Enter your current holding values. Use a prefill button to load a portfolio as your starting point.
         </p>
+
+        {/* Prefill buttons */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '4px' }}>Prefill from:</span>
+          <button
+            type="button"
+            onClick={() => prefill('optimal')}
+            style={{
+              padding: '6px 14px', borderRadius: '20px', border: '1.5px solid',
+              fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+              borderColor: activeSource === 'optimal' ? 'var(--accent)' : 'var(--border)',
+              background: activeSource === 'optimal' ? 'var(--accent-pale)' : 'var(--surface)',
+              color: activeSource === 'optimal' ? 'var(--accent)' : 'var(--text-muted)',
+            }}>
+            ◆ Optimal Portfolio
+          </button>
+          {targetVolAllocations && (
+            <button
+              type="button"
+              onClick={() => prefill('targetvol')}
+              style={{
+                padding: '6px 14px', borderRadius: '20px', border: '1.5px solid',
+                fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                borderColor: activeSource === 'targetvol' ? 'var(--accent)' : 'var(--border)',
+                background: activeSource === 'targetvol' ? 'var(--accent-pale)' : 'var(--surface)',
+                color: activeSource === 'targetvol' ? 'var(--accent)' : 'var(--text-muted)',
+              }}>
+              ◎ Target-Vol Portfolio
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setHoldings(h => h.map(x => ({ ...x, current_value: 0 }))); setTotalValue(0); setResult(null) }}
+            style={{
+              padding: '6px 14px', borderRadius: '20px', border: '1.5px solid var(--border)',
+              fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+              background: 'var(--surface)', color: 'var(--text-muted)',
+            }}>
+            ✕ Clear All
+          </button>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
           {holdings.map(h => (
             <div key={h.ticker} className="form-group">
