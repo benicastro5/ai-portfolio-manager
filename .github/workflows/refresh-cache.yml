@@ -14,4 +14,6 @@ jobs:
         run: |
           curl -sf -X POST "${{ secrets.BACKEND_URL }}/admin/refresh-cache" \
             -H "x-admin-key: ${{ secrets.ADMIN_REFRESH_KEY }}" \
-            --max-time 30
+            --max-time 120 \
+            --retry 2 \
+            --retry-delay 15
