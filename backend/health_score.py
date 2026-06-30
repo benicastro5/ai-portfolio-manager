@@ -126,7 +126,10 @@ def _score_goal_alignment(portfolio: dict, goal: str, horizon: float, risk_toler
 EXPENSE_RATIOS = {
     "SPY": 0.09, "QQQ": 0.20, "IWM": 0.19, "EFA": 0.32, "EEM": 0.68,
     "BND": 0.03, "TLT": 0.15, "HYG": 0.48, "LQD": 0.14, "SHY": 0.15, "TIP": 0.19,
-    "GLD": 0.40, "SLV": 0.50, "USO": 0.79, "VNQ": 0.13, "DBC": 0.85,
+    "GLD": 0.40, "SLV": 0.50, "USO": 0.79, "VNQ": 0.13, "DBC": 0.85, "DBA": 0.85,
+    "SCHD": 0.06, "BNDX": 0.07, "EMB": 0.39,
+    "BOTZ": 0.68, "CIBR": 0.60, "ICLN": 0.40, "ITA": 0.40, "PAVE": 0.47, "UFO": 0.75,
+    "XBI": 0.35,
     "XLK": 0.10, "XLF": 0.10, "XLE": 0.10, "XLV": 0.10, "XLY": 0.10,
     "XLP": 0.10, "XLI": 0.10, "XLU": 0.10, "XLB": 0.10, "XLC": 0.10,
     "SOXX": 0.35, "IBB": 0.44, "VT": 0.06, "ACWI": 0.32,

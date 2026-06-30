@@ -16,7 +16,10 @@ function horizonLabel(val) {
 
 const SECTORS = ['Technology', 'Energy', 'Commodities', 'Real Estate', 'High Yield', 'Emerging Markets', 'Small Cap', 'Financials', 'Healthcare', 'Consumer Staples', 'Consumer Discretionary', 'Industrials', 'Communication Services', 'Semiconductors']
 
-const ETFS = ['SPY','QQQ','IWM','EFA','EEM','BND','TLT','GLD','SLV','USO','VNQ','HYG','LQD','SHY','TIP','DBC']
+const ETFS = [
+  'SPY','QQQ','IWM','EFA','EEM','BND','TLT','GLD','SLV','USO','VNQ','HYG','LQD','SHY','TIP','DBC',
+  'SCHD','BNDX','EMB','DBA','BOTZ','CIBR','ICLN','ITA','PAVE','UFO','XBI',
+]
 
 const STOCKS = [
   'AAPL','MSFT','NVDA','GOOGL','META','AMZN','TSLA','AVGO','ORCL','CRM','AMD','INTC','ADBE','NOW','UBER',
