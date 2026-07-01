@@ -80,6 +80,17 @@ export default function Dashboard({ data, onLoadPortfolio }) {
     window.print()
   }
 
+  const handleExportJSON = () => {
+    const filename = `portfolio_${userProfile.goal}_${new Date().toISOString().slice(0, 10)}.json`
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const portfolioTickers = portfolio.allocations?.map(a => a.ticker) || []
 
   return (
@@ -114,11 +125,16 @@ export default function Dashboard({ data, onLoadPortfolio }) {
                 {rb.label}
               </span>
             )}
-            {/* Save + Print buttons */}
+            {/* Save + Export + Print buttons */}
             <button onClick={() => setShowSavePanel(v => !v)}
               style={{ padding: '5px 12px', borderRadius: '8px', border: '1.5px solid var(--border)',
                 background: 'var(--surface)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
               ◈ Save
+            </button>
+            <button onClick={handleExportJSON}
+              style={{ padding: '5px 12px', borderRadius: '8px', border: '1.5px solid var(--border)',
+                background: 'var(--surface)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+              ⇩ Export JSON
             </button>
             <button onClick={handlePrint}
               style={{ padding: '5px 12px', borderRadius: '8px', border: '1.5px solid var(--border)',

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import OnboardingForm from './components/OnboardingForm'
 import Dashboard from './components/Dashboard'
 import LoadingScreen from './components/LoadingScreen'
@@ -28,6 +28,25 @@ function App() {
     setError(null)
   }
 
+  const importRef = useRef()
+  const handleImport = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result)
+        if (!parsed.portfolio || !parsed.userProfile) throw new Error('Invalid portfolio file')
+        setPortfolioData(parsed)
+        setError(null)
+      } catch {
+        setError('Could not load portfolio — file may be invalid or corrupted.')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -37,11 +56,18 @@ function App() {
             <span className="brand-name">AI Portfolio Manager</span>
             <span className="brand-tag">Institutional Grade</span>
           </div>
-          {portfolioData && (
-            <button className="btn-ghost" onClick={handleReset}>
-              ← New Portfolio
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input ref={importRef} type="file" accept=".json" onChange={handleImport}
+              style={{ display: 'none' }} />
+            <button className="btn-ghost" onClick={() => importRef.current?.click()}>
+              ⇪ Import Portfolio
             </button>
-          )}
+            {portfolioData && (
+              <button className="btn-ghost" onClick={handleReset}>
+                ← New Portfolio
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
