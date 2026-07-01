@@ -20,6 +20,7 @@ from fundamentals import fetch_fundamentals, score_fundamentals
 from geography import filter_by_geography, build_geo_constraints, compute_geo_exposure
 from stress_test import run_stress_tests
 from health_score import compute_health_score
+from alpaca import get_account, get_positions, place_orders as alpaca_place_orders
 import threading
 
 logging.basicConfig(level=logging.INFO)
@@ -356,5 +357,51 @@ def market_scan():
         corr_matrix = get_correlation_matrix(market_data)
         ranked = rank_etfs(market_data, corr_matrix)
         return {"ranked_etfs": ranked, "timestamp": __import__("datetime").datetime.utcnow().isoformat()}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ─── Alpaca Broker Endpoints ───────────────────────────────────────────────────
+
+class AlpacaCredentials(BaseModel):
+    api_key: str
+    api_secret: str
+    paper: bool = True
+
+class AlpacaExecuteRequest(BaseModel):
+    api_key: str
+    api_secret: str
+    paper: bool = True
+    trades: list[dict]  # [{ticker, action, dollar_amount}]
+
+@app.post("/broker/alpaca/connect")
+def alpaca_connect(creds: AlpacaCredentials):
+    try:
+        account = get_account(creds.api_key, creds.api_secret, creds.paper)
+        return account
+    except ValueError as e:
+        raise HTTPException(401, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/broker/alpaca/positions")
+def alpaca_positions(creds: AlpacaCredentials):
+    try:
+        positions = get_positions(creds.api_key, creds.api_secret, creds.paper)
+        return {"positions": positions}
+    except ValueError as e:
+        raise HTTPException(401, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/broker/alpaca/execute")
+def alpaca_execute(req: AlpacaExecuteRequest):
+    try:
+        results = alpaca_place_orders(req.trades, req.api_key, req.api_secret, req.paper)
+        submitted = sum(1 for r in results if r["status"] == "submitted")
+        errors    = sum(1 for r in results if r["status"] == "error")
+        return {"results": results, "submitted": submitted, "errors": errors}
+    except ValueError as e:
+        raise HTTPException(401, str(e))
     except Exception as e:
         raise HTTPException(500, str(e))

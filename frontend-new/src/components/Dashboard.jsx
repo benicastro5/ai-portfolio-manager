@@ -13,6 +13,7 @@ import HealthScore from './HealthScore'
 import NewsFeed from './NewsFeed'
 import EconomicCalendar from './EconomicCalendar'
 import BenchmarkComparison from './BenchmarkComparison'
+import BrokerPanel from './BrokerPanel'
 import { savePortfolio, loadSaved, deleteSaved } from '../utils/savedPortfolios'
 
 const fmtPct = (v) => `${v > 0 ? '+' : ''}${v?.toFixed(1)}%`
@@ -23,6 +24,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
   const [saveName, setSaveName] = useState('')
   const [saved, setSaved] = useState(() => loadSaved())
   const [showSavePanel, setShowSavePanel] = useState(false)
+  const [rebalanceTrades, setRebalanceTrades] = useState([])
   const printRef = useRef()
 
   const {
@@ -59,6 +61,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
     { id: 'ranking',      label: '↑ ETF Ranking' },
     { id: 'frontier',     label: '~ Efficient Frontier' },
     { id: 'rebalance',    label: '⟳ Rebalancing' },
+    { id: 'broker',       label: '◈ Broker' },
     { id: 'explain',      label: '◉ AI Explanation' },
   ]
 
@@ -401,9 +404,15 @@ export default function Dashboard({ data, onLoadPortfolio }) {
           targetAllocations={portfolio.allocations}
           targetVolAllocations={target_vol_portfolio?.allocations}
           portfolioValue={userProfile.investment_amount}
+          onTradesReady={setRebalanceTrades}
           horizon={userProfile.horizon}
           vol={userProfile.risk_tolerance}
         />
+      )}
+
+      {/* Tab: Broker */}
+      {tab === 'broker' && (
+        <BrokerPanel rebalanceTrades={rebalanceTrades} />
       )}
 
       {/* Tab: Explanation */}

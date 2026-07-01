@@ -25,7 +25,7 @@ function recommendedDrift(horizon, vol) {
   return { pct, reason: `${horizonDesc}, ${volDesc}` }
 }
 
-export default function RebalancingPanel({ targetAllocations, targetVolAllocations, portfolioValue, horizon, vol }) {
+export default function RebalancingPanel({ targetAllocations, targetVolAllocations, portfolioValue, horizon, vol, onTradesReady }) {
   const buildHoldings = (allocs) =>
     allocs.map(a => ({ ticker: a.ticker, current_value: a.dollar_amount }))
 
@@ -65,6 +65,13 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
         drift_threshold: Number(threshold),
       })
       setResult(data)
+      if (onTradesReady && data.rows) {
+        onTradesReady(data.rows.map(r => ({
+          ticker: r.ticker,
+          action: r.action,
+          dollar_amount: r.trade_amount,
+        })))
+      }
     } catch (e) {
       console.error(e)
     } finally {
