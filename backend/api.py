@@ -249,9 +249,9 @@ def generate_portfolio(profile: UserProfile):
         # Benchmark comparison: SPY (100% equity) and 60/40 (SPY + BND)
         spy_data = market_data.get("SPY") or market_data.get(list(market_data.keys())[0])
         bnd_data = market_data.get("BND")
-        spy_ret = forecasts.get("SPY", {}).get("ensemble_return", 0) or 0
+        spy_ret = forecasts.get("SPY", {}).get("forecasted_annual_return", 0) or 0
         spy_vol = spy_data.get("volatility", 0.18) if spy_data else 0.18
-        bnd_ret = forecasts.get("BND", {}).get("ensemble_return", 0) or 0.04
+        bnd_ret = forecasts.get("BND", {}).get("forecasted_annual_return", 0) or 0.04
         bnd_vol = bnd_data.get("volatility", 0.07) if bnd_data else 0.07
         benchmarks = {
             "spy": {
