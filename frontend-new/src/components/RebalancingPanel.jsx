@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { rebalancePortfolio } from '../api'
 
 const fmtDollar = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
@@ -25,9 +25,14 @@ function recommendedDrift(horizon, vol) {
   return { pct, reason: `${horizonDesc}, ${volDesc}` }
 }
 
-export default function RebalancingPanel({ targetAllocations, targetVolAllocations, portfolioValue, horizon, vol, onTradesReady }) {
+export default function RebalancingPanel({ targetAllocations, targetVolAllocations, portfolioValue, horizon, vol, onTradesReady, alpacaPositions }) {
   const buildHoldings = (allocs) =>
     allocs.map(a => ({ ticker: a.ticker, current_value: a.dollar_amount }))
+
+  const buildHoldingsFromAlpaca = (allocs, positions) => {
+    const posMap = Object.fromEntries((positions || []).map(p => [p.ticker, p.market_value]))
+    return allocs.map(a => ({ ticker: a.ticker, current_value: posMap[a.ticker] ?? 0 }))
+  }
 
   const [holdings, setHoldings] = useState(buildHoldings(targetAllocations))
   const [activeSource, setActiveSource] = useState('optimal')
@@ -35,6 +40,33 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
   const [loading, setLoading] = useState(false)
   const [threshold, setThreshold] = useState(5)
   const [totalValue, setTotalValue] = useState(portfolioValue)
+  const autoRanRef = useRef(false)
+
+  // When Alpaca positions arrive, auto-import and auto-run rebalance
+  useEffect(() => {
+    if (!alpacaPositions || autoRanRef.current) return
+    autoRanRef.current = true
+    const h = buildHoldingsFromAlpaca(targetAllocations, alpacaPositions)
+    const total = alpacaPositions.reduce((s, p) => s + p.market_value, 0)
+    setHoldings(h)
+    setTotalValue(total || portfolioValue)
+    setActiveSource('alpaca')
+    setResult(null)
+    // Trigger rebalance automatically after state settles
+    setTimeout(() => {
+      rebalancePortfolio({
+        target_allocations: targetAllocations.map(a => ({ ticker: a.ticker, weight_decimal: a.weight_decimal })),
+        current_holdings: h,
+        portfolio_value: total || portfolioValue,
+        drift_threshold: threshold,
+      }).then(data => {
+        setResult(data)
+        if (onTradesReady && data.rows) {
+          onTradesReady(data.rows.map(r => ({ ticker: r.ticker, action: r.action, dollar_amount: r.trade_amount })))
+        }
+      }).catch(console.error)
+    }, 50)
+  }, [alpacaPositions])
 
   const prefill = (source) => {
     const allocs = source === 'optimal' ? targetAllocations : targetVolAllocations
@@ -118,9 +150,15 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
               ◎ Target-Vol Portfolio
             </button>
           )}
+          {activeSource === 'alpaca' && (
+            <span style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
+              background: 'var(--green-pale)', color: 'var(--green)', border: '1.5px solid var(--green)' }}>
+              ✓ Live Alpaca Positions
+            </span>
+          )}
           <button
             type="button"
-            onClick={() => { setHoldings(h => h.map(x => ({ ...x, current_value: 0 }))); setTotalValue(0); setResult(null) }}
+            onClick={() => { setHoldings(h => h.map(x => ({ ...x, current_value: 0 }))); setTotalValue(0); setResult(null); autoRanRef.current = false }}
             style={{
               padding: '6px 14px', borderRadius: '20px', border: '1.5px solid var(--border)',
               fontSize: '12px', fontWeight: 700, cursor: 'pointer',

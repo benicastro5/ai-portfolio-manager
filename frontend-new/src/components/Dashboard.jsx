@@ -15,9 +15,102 @@ import EconomicCalendar from './EconomicCalendar'
 import BenchmarkComparison from './BenchmarkComparison'
 import BrokerPanel from './BrokerPanel'
 import { savePortfolio, loadSaved, deleteSaved } from '../utils/savedPortfolios'
+import { alpacaConnect, alpacaPositions as fetchAlpacaPositions } from '../api'
 
 const fmtPct = (v) => `${v > 0 ? '+' : ''}${v?.toFixed(1)}%`
 const fmtDollar = (v) => `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
+
+function BrokerStatusBar({ account, positions, onConnect, onDisconnect, onSwitchBroker }) {
+  const [showForm, setShowForm] = useState(false)
+  const [key, setKey] = useState('')
+  const [secret, setSecret] = useState('')
+  const [paper, setPaper] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState(null)
+
+  const handleConnect = async () => {
+    if (!key || !secret) return
+    setLoading(true); setErr(null)
+    try {
+      const creds = { api_key: key, api_secret: secret, paper }
+      const acc = await alpacaConnect(creds)
+      const pos = await fetchAlpacaPositions(creds)
+      onConnect(creds, acc, pos.positions)
+      setShowForm(false); setKey(''); setSecret('')
+    } catch (e) { setErr(e.message) }
+    finally { setLoading(false) }
+  }
+
+  if (account) return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px',
+      background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)',
+      marginBottom: '16px', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px',
+        background: account.paper ? 'var(--gold-pale)' : 'var(--green-pale)',
+        color: account.paper ? 'var(--gold)' : 'var(--green)' }}>
+        ● Alpaca {account.paper ? 'Paper' : 'Live'} Connected
+      </span>
+      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+        Portfolio: <strong style={{ color: 'var(--text)' }}>${Number(account.portfolio_value).toLocaleString()}</strong>
+        {' · '}Cash: <strong style={{ color: 'var(--green)' }}>${Number(account.cash).toLocaleString()}</strong>
+        {' · '}{positions?.length ?? 0} positions
+      </span>
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+        <button onClick={onSwitchBroker}
+          style={{ padding: '4px 12px', borderRadius: '6px', border: '1.5px solid var(--accent)',
+            color: 'var(--accent)', background: 'transparent', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+          ◈ Review Trades
+        </button>
+        <button onClick={onDisconnect}
+          style={{ padding: '4px 12px', borderRadius: '6px', border: '1.5px solid var(--border)',
+            color: 'var(--text-muted)', background: 'transparent', fontSize: '12px', cursor: 'pointer' }}>
+          Disconnect
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      {!showForm ? (
+        <button onClick={() => setShowForm(true)}
+          style={{ padding: '6px 14px', borderRadius: '8px', border: '1.5px dashed var(--border)',
+            background: 'transparent', fontSize: '12px', fontWeight: 600, cursor: 'pointer', color: 'var(--text-muted)' }}>
+          ◈ Connect Broker (Alpaca)
+        </button>
+      ) : (
+        <div style={{ padding: '14px 16px', background: 'var(--surface2)', borderRadius: '10px',
+          border: '1px solid var(--border)', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="form-group" style={{ margin: 0, minWidth: '200px' }}>
+            <label style={{ fontSize: '11px' }}>API Key</label>
+            <input type="text" value={key} onChange={e => setKey(e.target.value.trim())}
+              placeholder="PKXXXXXXXXXXXXXX" spellCheck={false} style={{ padding: '6px 10px', fontSize: '12px' }} />
+          </div>
+          <div className="form-group" style={{ margin: 0, minWidth: '200px' }}>
+            <label style={{ fontSize: '11px' }}>API Secret</label>
+            <input type="password" value={secret} onChange={e => setSecret(e.target.value.trim())}
+              placeholder="••••••••••••••••" style={{ padding: '6px 10px', fontSize: '12px' }} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', paddingBottom: '2px' }}>
+            <input type="checkbox" checked={paper} onChange={e => setPaper(e.target.checked)} />
+            Paper
+          </label>
+          <button onClick={handleConnect} disabled={loading || !key || !secret}
+            style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', background: 'var(--accent)',
+              color: 'white', fontWeight: 700, fontSize: '12px', cursor: 'pointer', opacity: (!key||!secret)?0.5:1 }}>
+            {loading ? '⟳' : 'Connect'}
+          </button>
+          <button onClick={() => { setShowForm(false); setErr(null) }}
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1.5px solid var(--border)',
+              background: 'transparent', fontSize: '12px', cursor: 'pointer' }}>
+            Cancel
+          </button>
+          {err && <span style={{ fontSize: '12px', color: 'var(--red)', width: '100%' }}>⚠ {err}</span>}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Dashboard({ data, onLoadPortfolio }) {
   const [tab, setTab] = useState('portfolio')
@@ -25,6 +118,9 @@ export default function Dashboard({ data, onLoadPortfolio }) {
   const [saved, setSaved] = useState(() => loadSaved())
   const [showSavePanel, setShowSavePanel] = useState(false)
   const [rebalanceTrades, setRebalanceTrades] = useState([])
+  const [alpacaCreds, setAlpacaCreds] = useState(null)     // { api_key, api_secret, paper }
+  const [alpacaAccount, setAlpacaAccount] = useState(null)
+  const [alpacaPositions, setAlpacaPositions] = useState(null)
   const printRef = useRef()
 
   const {
@@ -212,6 +308,19 @@ export default function Dashboard({ data, onLoadPortfolio }) {
           </div>
         ))}
       </div>
+
+      {/* Broker status bar */}
+      <BrokerStatusBar
+        account={alpacaAccount}
+        positions={alpacaPositions}
+        onConnect={(creds, account, positions) => {
+          setAlpacaCreds(creds)
+          setAlpacaAccount(account)
+          setAlpacaPositions(positions)
+        }}
+        onDisconnect={() => { setAlpacaCreds(null); setAlpacaAccount(null); setAlpacaPositions(null) }}
+        onSwitchBroker={() => setTab('broker')}
+      />
 
       {/* Tabs */}
       <div className="tabs">
@@ -407,12 +516,26 @@ export default function Dashboard({ data, onLoadPortfolio }) {
           onTradesReady={setRebalanceTrades}
           horizon={userProfile.horizon}
           vol={userProfile.risk_tolerance}
+          alpacaPositions={alpacaPositions}
         />
       )}
 
       {/* Tab: Broker */}
       {tab === 'broker' && (
-        <BrokerPanel rebalanceTrades={rebalanceTrades} />
+        <BrokerPanel
+          rebalanceTrades={rebalanceTrades}
+          alpacaCreds={alpacaCreds}
+          alpacaAccount={alpacaAccount}
+          alpacaPositions={alpacaPositions}
+          onConnect={(creds, account, positions) => {
+            setAlpacaCreds(creds)
+            setAlpacaAccount(account)
+            setAlpacaPositions(positions)
+          }}
+          onDisconnect={() => { setAlpacaCreds(null); setAlpacaAccount(null); setAlpacaPositions(null) }}
+          onExecuteDone={(positions) => setAlpacaPositions(positions)}
+          onGoToRebalance={() => setTab('rebalance')}
+        />
       )}
 
       {/* Tab: Explanation */}
