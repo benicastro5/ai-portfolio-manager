@@ -22,6 +22,7 @@ from stress_test import run_stress_tests
 from health_score import compute_health_score
 from alpaca import get_account, get_positions, place_orders as alpaca_place_orders
 from macro_regime import compute_macro_regime
+from backtest import run_backtest
 import threading
 
 logging.basicConfig(level=logging.INFO)
@@ -379,6 +380,28 @@ def market_scan():
 
 
 # ─── Alpaca Broker Endpoints ───────────────────────────────────────────────────
+
+class BacktestRequest(BaseModel):
+    allocations: list[dict]      # [{ticker, weight_decimal}]
+    initial_value: float = 10000
+    period_years: int = 3
+    rebalance_freq: str = "none"  # "none" | "quarterly" | "annual"
+
+@app.post("/portfolio/backtest")
+def portfolio_backtest(req: BacktestRequest):
+    try:
+        result = run_backtest(
+            allocations=req.allocations,
+            initial_value=req.initial_value,
+            period_years=req.period_years,
+            rebalance_freq=req.rebalance_freq,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
 
 class AlpacaCredentials(BaseModel):
     api_key: str

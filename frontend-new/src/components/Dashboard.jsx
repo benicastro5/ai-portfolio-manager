@@ -15,6 +15,7 @@ import EconomicCalendar from './EconomicCalendar'
 import BenchmarkComparison from './BenchmarkComparison'
 import BrokerPanel from './BrokerPanel'
 import MacroRegimePanel from './MacroRegimePanel'
+import BacktestPanel from './BacktestPanel'
 import { savePortfolio, loadSaved, deleteSaved } from '../utils/savedPortfolios'
 import { alpacaConnect, alpacaPositions as fetchAlpacaPositions } from '../api'
 
@@ -158,6 +159,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
     { id: 'calendar',     label: '◇ Macro Calendar' },
     { id: 'ranking',      label: '↑ ETF Ranking' },
     { id: 'frontier',     label: '~ Efficient Frontier' },
+    { id: 'backtest',     label: '↺ Backtest' },
     { id: 'rebalance',    label: '⟳ Rebalancing' },
     { id: 'broker',       label: '◈ Broker' },
     { id: 'explain',      label: '◉ AI Explanation' },
@@ -512,6 +514,11 @@ export default function Dashboard({ data, onLoadPortfolio }) {
             userRisk={userProfile.risk_tolerance}
           />
         </div>
+      )}
+
+      {/* Tab: Backtest */}
+      {tab === 'backtest' && (
+        <BacktestPanel allocations={portfolio.allocations} />
       )}
 
       {/* Tab: Rebalancing */}
