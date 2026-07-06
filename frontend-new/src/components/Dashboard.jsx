@@ -143,13 +143,13 @@ export default function Dashboard({ data, onLoadPortfolio }) {
     { label: 'Portfolio Volatility', value: `${portfolio.portfolio_volatility?.toFixed(1)}%`, sub: 'Annual', color: 'var(--gold)' },
     { label: 'Sharpe Ratio', value: portfolio.sharpe_ratio?.toFixed(2), sub: 'Risk-Adjusted', color: 'var(--accent)' },
     { label: 'Max Drawdown Est.', value: `${portfolio.max_drawdown_estimate?.toFixed(1)}%`, sub: '95th pctile', color: 'var(--red)' },
-    { label: 'Health Score', value: health_score?.overall ?? '—', sub: health_score?.overall_label ?? '', color: health_score?.overall_color ?? 'var(--accent)' },
+    { label: 'Health Score', value: health_score?.overall ?? '—', sub: health_score?.overall_label ?? '', color: health_score?.overall_color ?? 'var(--accent)', tab: 'backtest' },
   ]
 
   const tabs = [
     { id: 'portfolio',    label: '◆ Portfolio' },
     { id: 'macro',        label: '⊕ Macro Regime' },
-    { id: 'health',       label: '◉ Health Score' },
+    { id: 'backtest',     label: '↺ Backtest' },
     { id: 'monte',        label: '~ Monte Carlo' },
     { id: 'stress',       label: '⚡ Stress Tests' },
     { id: 'benchmark',    label: '⊞ Benchmark' },
@@ -159,7 +159,6 @@ export default function Dashboard({ data, onLoadPortfolio }) {
     { id: 'calendar',     label: '◇ Macro Calendar' },
     { id: 'ranking',      label: '↑ ETF Ranking' },
     { id: 'frontier',     label: '~ Efficient Frontier' },
-    { id: 'backtest',     label: '↺ Backtest' },
     { id: 'rebalance',    label: '⟳ Rebalancing' },
     { id: 'broker',       label: '◈ Broker' },
     { id: 'explain',      label: '◉ AI Explanation' },
@@ -427,12 +426,9 @@ export default function Dashboard({ data, onLoadPortfolio }) {
         <MacroRegimePanel macroRegime={macro_regime} />
       )}
 
-      {/* Tab: Health Score */}
-      {tab === 'health' && (
-        <div className="card">
-          <div className="card-title">Portfolio Health Score</div>
-          <HealthScore healthScore={health_score} />
-        </div>
+      {/* Tab: Backtest */}
+      {tab === 'backtest' && (
+        <BacktestPanel allocations={portfolio.allocations} />
       )}
 
       {/* Tab: Monte Carlo */}
@@ -514,11 +510,6 @@ export default function Dashboard({ data, onLoadPortfolio }) {
             userRisk={userProfile.risk_tolerance}
           />
         </div>
-      )}
-
-      {/* Tab: Backtest */}
-      {tab === 'backtest' && (
-        <BacktestPanel allocations={portfolio.allocations} />
       )}
 
       {/* Tab: Rebalancing */}
