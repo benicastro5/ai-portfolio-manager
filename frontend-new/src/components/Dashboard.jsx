@@ -14,6 +14,7 @@ import NewsFeed from './NewsFeed'
 import EconomicCalendar from './EconomicCalendar'
 import BenchmarkComparison from './BenchmarkComparison'
 import BrokerPanel from './BrokerPanel'
+import MacroRegimePanel from './MacroRegimePanel'
 import { savePortfolio, loadSaved, deleteSaved } from '../utils/savedPortfolios'
 import { alpacaConnect, alpacaPositions as fetchAlpacaPositions } from '../api'
 
@@ -126,7 +127,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
   const {
     portfolio, target_vol_portfolio, ranked_etfs, efficient_frontier,
     correlation_matrix, explanation, userProfile, data_source, data_as_of,
-    dominant_regime, geo_exposure, stress_tests, health_score, benchmarks,
+    dominant_regime, macro_regime, geo_exposure, stress_tests, health_score, benchmarks,
   } = data
 
   const regimeBadge = {
@@ -146,6 +147,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
 
   const tabs = [
     { id: 'portfolio',    label: '◆ Portfolio' },
+    { id: 'macro',        label: '⊕ Macro Regime' },
     { id: 'health',       label: '◉ Health Score' },
     { id: 'monte',        label: '~ Monte Carlo' },
     { id: 'stress',       label: '⚡ Stress Tests' },
@@ -220,8 +222,8 @@ export default function Dashboard({ data, onLoadPortfolio }) {
               </span>
             )}
             {dominant_regime && (
-              <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px', background: rb.bg, color: rb.color }}>
-                {rb.label}
+              <span onClick={() => setTab('macro')} style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px', background: rb.bg, color: rb.color, cursor: 'pointer' }}>
+                {rb.label}{macro_regime?.regime_score != null ? ` · ${macro_regime.regime_score > 0 ? '+' : ''}${macro_regime.regime_score}` : ''}
               </span>
             )}
             {/* Save + Export + Print buttons */}
@@ -416,6 +418,11 @@ export default function Dashboard({ data, onLoadPortfolio }) {
             <CorrelationMatrix data={correlation_matrix} />
           </div>
         </div>
+      )}
+
+      {/* Tab: Macro Regime */}
+      {tab === 'macro' && (
+        <MacroRegimePanel macroRegime={macro_regime} />
       )}
 
       {/* Tab: Health Score */}

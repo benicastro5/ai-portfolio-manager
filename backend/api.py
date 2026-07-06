@@ -21,6 +21,7 @@ from geography import filter_by_geography, build_geo_constraints, compute_geo_ex
 from stress_test import run_stress_tests
 from health_score import compute_health_score
 from alpaca import get_account, get_positions, place_orders as alpaca_place_orders
+from macro_regime import compute_macro_regime
 import threading
 
 logging.basicConfig(level=logging.INFO)
@@ -151,6 +152,16 @@ def generate_portfolio(profile: UserProfile):
         # Score and rank WITHOUT fundamentals first (fast)
         ranked = rank_etfs(market_data, corr_matrix, forecasts=forecasts, fundamentals={})
 
+        # Macro regime — fetch live VIX, yield curve, credit spread
+        t_macro = time.time()
+        try:
+            macro = compute_macro_regime()
+        except Exception as e:
+            logger.warning(f"Macro regime fetch failed: {e}")
+            macro = {"regime": "neutral", "regime_score": 0, "confidence": "low",
+                     "equity_cap_adj": 0.0, "bond_floor_adj": 0.0, "signals": {}, "summary": ""}
+        logger.info(f"[TIMING] macro regime ({macro['regime']}): {time.time()-t_macro:.1f}s")
+
         # Optimize using forecast returns + Ledoit-Wolf covariance
         t4 = time.time()
         geo_constraints = build_geo_constraints(
@@ -159,12 +170,15 @@ def generate_portfolio(profile: UserProfile):
             geo_max={k: v / 100 for k, v in profile.geo_max.items()},
         )
 
+        # Apply macro overlay: cap equities tighter in bear regime
+        macro_max_weight = max(0.15, min(0.35, 0.25 + macro.get("equity_cap_adj", 0.0)))
+
         result = optimize_portfolio(
             market_data=market_data,
             cov_matrix=cov_matrix,
             user_risk_pct=profile.risk_tolerance / 100,
             goal=profile.goal,
-            max_weight=0.25,
+            max_weight=macro_max_weight,
             min_assets=4,
             method="mpt",
             forecasts=forecasts,
@@ -208,12 +222,14 @@ def generate_portfolio(profile: UserProfile):
         # Efficient frontier (using forecast returns)
         frontier = compute_efficient_frontier(market_data, cov_matrix, n_points=25, forecasts=forecasts)
 
-        # Regime summary across portfolio
-        regime_counts = {}
-        for ticker in [a["ticker"] for a in result["allocations"]]:
-            r = forecasts.get(ticker, {}).get("regime", {}).get("regime", "neutral")
-            regime_counts[r] = regime_counts.get(r, 0) + 1
-        dominant_regime = max(regime_counts, key=regime_counts.get) if regime_counts else "neutral"
+        # Use macro regime as dominant (top-down), fall back to bottom-up portfolio vote
+        dominant_regime = macro.get("regime", "neutral")
+        if macro.get("confidence") == "low":
+            regime_counts = {}
+            for ticker in [a["ticker"] for a in result["allocations"]]:
+                r = forecasts.get(ticker, {}).get("regime", {}).get("regime", "neutral")
+                regime_counts[r] = regime_counts.get(r, 0) + 1
+            dominant_regime = max(regime_counts, key=regime_counts.get) if regime_counts else "neutral"
 
         # Correlation matrix for response
         included_tickers = [a["ticker"] for a in result["allocations"]]
@@ -286,6 +302,7 @@ def generate_portfolio(profile: UserProfile):
             "data_source": data_source,
             "data_as_of": data_as_of,
             "dominant_regime": dominant_regime,
+            "macro_regime": macro,
             "ranked_etfs": ranked,
             "efficient_frontier": frontier,
             "correlation_matrix": corr_data,
