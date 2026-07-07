@@ -34,8 +34,11 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
     return allocs.map(a => ({ ticker: a.ticker, current_value: posMap[a.ticker] ?? 0 }))
   }
 
+  const [targetPortfolio, setTargetPortfolio] = useState('optimal')
   const [holdings, setHoldings] = useState(buildHoldings(targetAllocations))
   const [activeSource, setActiveSource] = useState('optimal')
+
+  const activeTarget = targetPortfolio === 'optimal' ? targetAllocations : (targetVolAllocations || targetAllocations)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [threshold, setThreshold] = useState(5)
@@ -46,16 +49,15 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
   useEffect(() => {
     if (!alpacaPositions || autoRanRef.current) return
     autoRanRef.current = true
-    const h = buildHoldingsFromAlpaca(targetAllocations, alpacaPositions)
+    const h = buildHoldingsFromAlpaca(activeTarget, alpacaPositions)
     const total = alpacaPositions.reduce((s, p) => s + p.market_value, 0)
     setHoldings(h)
     setTotalValue(total || portfolioValue)
     setActiveSource('alpaca')
     setResult(null)
-    // Trigger rebalance automatically after state settles
     setTimeout(() => {
       rebalancePortfolio({
-        target_allocations: targetAllocations.map(a => ({ ticker: a.ticker, weight_decimal: a.weight_decimal })),
+        target_allocations: activeTarget.map(a => ({ ticker: a.ticker, weight_decimal: a.weight_decimal })),
         current_holdings: h,
         portfolio_value: total || portfolioValue,
         drift_threshold: threshold,
@@ -69,7 +71,7 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
   }, [alpacaPositions])
 
   const prefill = (source) => {
-    const allocs = source === 'optimal' ? targetAllocations : targetVolAllocations
+    const allocs = source === 'optimal' ? activeTarget : targetVolAllocations
     const h = buildHoldings(allocs)
     setHoldings(h)
     setTotalValue(h.reduce((sum, x) => sum + (Number(x.current_value) || 0), 0))
@@ -89,7 +91,7 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
     setLoading(true)
     try {
       const data = await rebalancePortfolio({
-        target_allocations: targetAllocations.map(a => ({
+        target_allocations: activeTarget.map(a => ({
           ticker: a.ticker, weight_decimal: a.weight_decimal
         })),
         current_holdings: holdings,
@@ -121,9 +123,30 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
           Enter your current holding values. Use a prefill button to load a portfolio as your starting point.
         </p>
 
+        {/* Target portfolio selector */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--text-muted)', marginRight: '4px' }}>Rebalance toward:</span>
+          <button type="button" onClick={() => { setTargetPortfolio('optimal'); setResult(null) }}
+            style={{ padding: '6px 14px', borderRadius: '20px', border: '1.5px solid', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+              borderColor: targetPortfolio === 'optimal' ? 'var(--accent)' : 'var(--border)',
+              background: targetPortfolio === 'optimal' ? 'var(--accent-pale)' : 'var(--surface)',
+              color: targetPortfolio === 'optimal' ? 'var(--accent)' : 'var(--text-muted)' }}>
+            ◆ Optimal Portfolio
+          </button>
+          {targetVolAllocations && (
+            <button type="button" onClick={() => { setTargetPortfolio('targetvol'); setResult(null) }}
+              style={{ padding: '6px 14px', borderRadius: '20px', border: '1.5px solid', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                borderColor: targetPortfolio === 'targetvol' ? 'var(--accent)' : 'var(--border)',
+                background: targetPortfolio === 'targetvol' ? 'var(--accent-pale)' : 'var(--surface)',
+                color: targetPortfolio === 'targetvol' ? 'var(--accent)' : 'var(--text-muted)' }}>
+              ◎ Target-Vol Portfolio
+            </button>
+          )}
+        </div>
+
         {/* Prefill buttons */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '4px' }}>Prefill from:</span>
+          <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '4px' }}>Current holdings from:</span>
           <button
             type="button"
             onClick={() => prefill('optimal')}

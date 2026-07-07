@@ -110,10 +110,13 @@ function MetricCompare({ label, port, spy, lowerBetter = false }) {
   )
 }
 
-export default function BacktestPanel({ allocations, monthlyContribution = 0 }) {
+export default function BacktestPanel({ allocations, targetVolAllocations, monthlyContribution = 0 }) {
+  const [source, setSource]   = useState('optimal')
   const [period, setPeriod]   = useState(3)
   const [rebal, setRebal]     = useState('none')
   const [contrib, setContrib] = useState(monthlyContribution)
+
+  const activeAllocations = source === 'optimal' ? allocations : (targetVolAllocations || allocations)
   const [result, setResult]   = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
@@ -122,7 +125,7 @@ export default function BacktestPanel({ allocations, monthlyContribution = 0 }) 
     setLoading(true); setError(null); setResult(null)
     try {
       const data = await runBacktest({
-        allocations: allocations.map(a => ({ ticker: a.ticker, weight_decimal: a.weight_decimal })),
+        allocations: activeAllocations.map(a => ({ ticker: a.ticker, weight_decimal: a.weight_decimal })),
         initial_value: 10000,
         period_years: period,
         rebalance_freq: rebal,
@@ -144,11 +147,33 @@ export default function BacktestPanel({ allocations, monthlyContribution = 0 }) 
       {/* Controls */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div className="card-title">Backtest Settings</div>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '14px' }}>
           Simulate how this portfolio would have performed historically using daily price data vs SPY benchmark.
           Initial investment: <strong>$10,000</strong>.
           {contrib > 0 && <span style={{ color: 'var(--green)', fontWeight: 600 }}> + ${Number(contrib).toLocaleString()}/mo contributions.</span>}
         </p>
+
+        {/* Portfolio selector */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '4px' }}>Portfolio:</span>
+          <button type="button" onClick={() => { setSource('optimal'); setResult(null) }}
+            style={{ padding: '6px 14px', borderRadius: '20px', border: '1.5px solid', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+              borderColor: source === 'optimal' ? 'var(--accent)' : 'var(--border)',
+              background: source === 'optimal' ? 'var(--accent-pale)' : 'var(--surface)',
+              color: source === 'optimal' ? 'var(--accent)' : 'var(--text-muted)' }}>
+            ◆ Optimal
+          </button>
+          {targetVolAllocations && (
+            <button type="button" onClick={() => { setSource('targetvol'); setResult(null) }}
+              style={{ padding: '6px 14px', borderRadius: '20px', border: '1.5px solid', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                borderColor: source === 'targetvol' ? 'var(--accent)' : 'var(--border)',
+                background: source === 'targetvol' ? 'var(--accent-pale)' : 'var(--surface)',
+                color: source === 'targetvol' ? 'var(--accent)' : 'var(--text-muted)' }}>
+              ◎ Target-Vol
+            </button>
+          )}
+        </div>
+
         <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label>Period</label>
