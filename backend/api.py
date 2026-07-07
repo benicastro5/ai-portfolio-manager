@@ -450,6 +450,33 @@ def alpaca_execute(req: AlpacaExecuteRequest):
         raise HTTPException(500, str(e))
 
 
+# ─── Live Prices ─────────────────────────────────────────────────────────────
+
+class PricesRequest(BaseModel):
+    tickers: list[str]
+
+@app.post("/market/prices")
+def market_prices(req: PricesRequest):
+    """Return current price for each ticker, fetched fresh from yfinance."""
+    import yfinance as yf
+    import numpy as np
+    result = {}
+    try:
+        raw = yf.download(req.tickers, period="2d", interval="1d",
+                          auto_adjust=True, progress=False, threads=True)
+        close = raw["Close"] if len(req.tickers) > 1 else raw[["Close"]].rename(columns={"Close": req.tickers[0]})
+        for t in req.tickers:
+            try:
+                col = close[t].dropna()
+                if len(col) >= 1:
+                    result[t] = {"current_price": round(float(col.iloc[-1]), 4)}
+            except Exception:
+                pass
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return result
+
+
 # ─── Trend Scanner ────────────────────────────────────────────────────────────
 
 class TrendScanRequest(BaseModel):

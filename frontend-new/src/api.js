@@ -53,6 +53,16 @@ export async function runBacktest(payload) {
   return res.json()
 }
 
+export async function fetchLivePrices(tickers) {
+  const res = await fetch(`${BASE}/market/prices`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tickers }),
+  })
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || `Error ${res.status}`) }
+  return res.json()
+}
+
 export async function runTrendScan(payload) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 180_000) // 3-min timeout

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { rebalancePortfolio } from '../api'
+import { rebalancePortfolio, fetchLivePrices } from '../api'
 
 const fmtDollar = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 
@@ -37,6 +37,9 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
   const [targetPortfolio, setTargetPortfolio] = useState('optimal')
   const [holdings, setHoldings] = useState(buildHoldings(targetAllocations))
   const [activeSource, setActiveSource] = useState('optimal')
+  const [livePrices, setLivePrices] = useState(null)   // {ticker: {current_price}}
+  const [priceLoading, setPriceLoading] = useState(false)
+  const [priceError, setPriceError] = useState(null)
 
   const activeTarget = targetPortfolio === 'optimal' ? targetAllocations : (targetVolAllocations || targetAllocations)
   const [result, setResult] = useState(null)
@@ -85,6 +88,36 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
       setTotalValue(updated.reduce((sum, x) => sum + (Number(x.current_value) || 0), 0))
       return updated
     })
+  }
+
+  const refreshPrices = async () => {
+    const allocs = activeTarget
+    const tickers = allocs.map(a => a.ticker)
+    setPriceLoading(true); setPriceError(null)
+    try {
+      const prices = await fetchLivePrices(tickers)
+      setLivePrices(prices)
+    } catch (e) {
+      setPriceError(e.message)
+    } finally {
+      setPriceLoading(false)
+    }
+  }
+
+  // Recalculate holding values using entry→current price change
+  const applyPriceUpdate = () => {
+    if (!livePrices) return
+    const updated = holdings.map(h => {
+      const alloc = activeTarget.find(a => a.ticker === h.ticker)
+      const entry = alloc?.entry_price
+      const live  = livePrices[h.ticker]?.current_price
+      if (!entry || !live || entry === 0) return h
+      const priceChange = live / entry
+      return { ...h, current_value: Math.round(Number(h.current_value) * priceChange) }
+    })
+    setHoldings(updated)
+    setTotalValue(updated.reduce((s, x) => s + (Number(x.current_value) || 0), 0))
+    setResult(null)
   }
 
   const runRebalance = async () => {
@@ -189,6 +222,78 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
             }}>
             ✕ Clear All
           </button>
+        </div>
+
+        {/* Price Refresh Panel */}
+        <div style={{ marginBottom: '20px', padding: '14px 16px', borderRadius: '10px',
+          background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)', marginBottom: '2px' }}>
+                ↻ Price Refresh
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Compare entry prices from your uploaded portfolio to today's live prices,
+                then auto-update holding values before rebalancing.
+              </div>
+            </div>
+            <button type="button" onClick={refreshPrices} disabled={priceLoading}
+              style={{ padding: '7px 16px', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+              {priceLoading ? '⟳ Fetching…' : '↻ Fetch Live Prices'}
+            </button>
+          </div>
+
+          {priceError && (
+            <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--red)' }}>{priceError}</div>
+          )}
+
+          {livePrices && (
+            <div style={{ marginTop: '14px' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table" style={{ fontSize: '12px' }}>
+                  <thead>
+                    <tr>
+                      <th>Ticker</th>
+                      <th>Entry Price</th>
+                      <th>Live Price</th>
+                      <th>Price Change</th>
+                      <th>Value Impact</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeTarget.map(a => {
+                      const live   = livePrices[a.ticker]?.current_price
+                      const entry  = a.entry_price
+                      const chg    = (entry && live) ? (live / entry - 1) * 100 : null
+                      const hv     = holdings.find(h => h.ticker === a.ticker)?.current_value || 0
+                      const impact = (chg !== null && hv) ? hv * (chg / 100) : null
+                      return (
+                        <tr key={a.ticker}>
+                          <td><strong style={{ color: 'var(--accent)' }}>{a.ticker}</strong></td>
+                          <td>{entry ? `$${entry.toFixed(2)}` : '—'}</td>
+                          <td>{live  ? `$${live.toFixed(2)}`  : '—'}</td>
+                          <td style={{ color: chg === null ? 'var(--text-muted)' : chg >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>
+                            {chg === null ? '—' : `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`}
+                          </td>
+                          <td style={{ color: impact === null ? 'var(--text-muted)' : impact >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+                            {impact === null ? '—' : `${impact >= 0 ? '+' : ''}$${Math.round(Math.abs(impact)).toLocaleString()}`}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <button type="button" onClick={applyPriceUpdate}
+                style={{ marginTop: '12px', padding: '7px 18px', fontSize: '12px', fontWeight: 700,
+                  background: 'var(--green)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                ✓ Apply Price Update to Holdings
+              </button>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '10px' }}>
+                Scales each holding's current value by its price change, then re-runs rebalance.
+              </span>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>

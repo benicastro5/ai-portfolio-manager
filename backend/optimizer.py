@@ -119,6 +119,7 @@ def optimize_portfolio(
                 "vol_regime": fc.get("garch", {}).get("vol_regime", "normal"),
                 "momentum_3m": round(float(fc.get("momentum", {}).get("m3", 0) or 0) * 100, 2),
                 "momentum_12m": round(float(fc.get("momentum", {}).get("m12", 0) or 0) * 100, 2),
+                "entry_price": round(float(info.get("current_price", 0)), 4),
             })
 
     allocations.sort(key=lambda x: x["weight"], reverse=True)
@@ -252,6 +253,7 @@ def optimize_target_vol_portfolio(
                 "risk_contribution": round(float(risk_contrib[i]) * 100, 2),
                 "regime": regime_info.get("regime", "neutral"),
                 "vol_regime": fc.get("garch", {}).get("vol_regime", "normal"),
+                "entry_price": round(float(info.get("current_price", 0)), 4),
             })
 
     allocations.sort(key=lambda x: x["weight"], reverse=True)
