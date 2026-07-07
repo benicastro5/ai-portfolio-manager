@@ -23,6 +23,7 @@ from health_score import compute_health_score
 from alpaca import get_account, get_positions, place_orders as alpaca_place_orders
 from macro_regime import compute_macro_regime
 from backtest import run_backtest
+from trend_scanner import run_trend_scan
 import threading
 
 logging.basicConfig(level=logging.INFO)
@@ -445,5 +446,20 @@ def alpaca_execute(req: AlpacaExecuteRequest):
         return {"results": results, "submitted": submitted, "errors": errors}
     except ValueError as e:
         raise HTTPException(401, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ─── Trend Scanner ────────────────────────────────────────────────────────────
+
+class TrendScanRequest(BaseModel):
+    goal: str = "balanced"
+    risk_tolerance: float = 15.0
+
+@app.post("/market/trend-scan")
+def market_trend_scan(req: TrendScanRequest):
+    try:
+        result = run_trend_scan(goal=req.goal, risk_tolerance=req.risk_tolerance)
+        return result
     except Exception as e:
         raise HTTPException(500, str(e))

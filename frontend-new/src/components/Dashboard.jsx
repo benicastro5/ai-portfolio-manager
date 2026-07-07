@@ -16,6 +16,7 @@ import BenchmarkComparison from './BenchmarkComparison'
 import BrokerPanel from './BrokerPanel'
 import MacroRegimePanel from './MacroRegimePanel'
 import BacktestPanel from './BacktestPanel'
+import TrendScannerPanel from './TrendScannerPanel'
 import { savePortfolio, loadSaved, deleteSaved } from '../utils/savedPortfolios'
 import { alpacaConnect, alpacaPositions as fetchAlpacaPositions } from '../api'
 
@@ -161,6 +162,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
     { id: 'frontier',     label: '~ Efficient Frontier' },
     { id: 'rebalance',    label: '⟳ Rebalancing' },
     { id: 'broker',       label: '◈ Broker' },
+    { id: 'trends',       label: '◈ Trends' },
     { id: 'explain',      label: '◉ AI Explanation' },
   ]
 
@@ -544,6 +546,14 @@ export default function Dashboard({ data, onLoadPortfolio }) {
           onDisconnect={() => { setAlpacaCreds(null); setAlpacaAccount(null); setAlpacaPositions(null) }}
           onExecuteDone={(positions) => setAlpacaPositions(positions)}
           onGoToRebalance={() => setTab('rebalance')}
+        />
+      )}
+
+      {/* Tab: Trend Scanner */}
+      {tab === 'trends' && (
+        <TrendScannerPanel
+          goal={userProfile?.goal}
+          riskTolerance={userProfile?.risk_tolerance}
         />
       )}
 
