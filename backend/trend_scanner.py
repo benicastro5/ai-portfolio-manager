@@ -184,33 +184,59 @@ def scan_reddit() -> dict[str, dict]:
 
 # ── Universe momentum fallback ─────────────────────────────────────────────────
 
+def _safe_close(raw, tickers: list[str]):
+    """
+    Extract a ticker→Series mapping from a yf.download result,
+    handling both MultiIndex (multi-ticker) and flat (single-ticker) DataFrames.
+    """
+    import pandas as pd
+    if raw is None or raw.empty:
+        return {}
+    cols = raw.columns
+    # MultiIndex: top level is field name (Close, Open, …)
+    if isinstance(cols, pd.MultiIndex):
+        try:
+            close = raw["Close"]
+            return {t: close[t].dropna() for t in tickers if t in close.columns}
+        except Exception:
+            return {}
+    # Flat columns — could be field names (single ticker) or ticker names
+    if "Close" in cols:
+        # Single-ticker download: columns are field names
+        t = tickers[0] if len(tickers) == 1 else None
+        if t:
+            return {t: raw["Close"].dropna()}
+        return {}
+    # Flat columns are ticker names (older yfinance behaviour)
+    return {t: raw[t].dropna() for t in tickers if t in cols}
+
+
 def scan_universe_momentum(top_n: int = 20) -> dict[str, dict]:
     """
     Rank tickers in ETF_UNIVERSE by 1-month price momentum.
-    This is the guaranteed fallback — always returns results.
-    Uses batch download for speed.
+    Guaranteed fallback — always returns results even if all external sources fail.
     """
     tickers = list(ETF_UNIVERSE.keys())
     try:
-        prices = yf.download(
+        raw = yf.download(
             tickers, period="2mo", interval="1wk",
             auto_adjust=True, progress=False, threads=True,
-        )["Close"]
+        )
+        close_map = _safe_close(raw, tickers)
     except Exception:
         return {}
 
     results: dict[str, dict] = {}
-    for t in tickers:
+    for t, col in close_map.items():
         try:
-            col = prices[t].dropna() if t in prices.columns else prices.dropna()
             if len(col) < 4:
                 continue
-            mom = float(col.iloc[-1] / col.iloc[-4] - 1) * 100  # ~1 month
-            if mom > 2:  # only include positive momentum
+            mom = float(col.iloc[-1] / col.iloc[-4] - 1) * 100
+            if mom > 2:
                 results[t] = {
-                    "score":   min(40, mom * 1.5),  # cap at 40 so real trends rank higher
-                    "sources": ["Universe Momentum (1-month price trend)"],
-                    "name":    ETF_UNIVERSE[t].get("name", t),
+                    "score":    min(40, mom * 1.5),
+                    "sources":  ["Universe Momentum (1-month price trend)"],
+                    "name":     ETF_UNIVERSE[t].get("name", t),
                     "momentum": round(mom, 1),
                 }
         except Exception:
@@ -222,13 +248,11 @@ def scan_universe_momentum(top_n: int = 20) -> dict[str, dict]:
 
 def _enrich_batch(tickers: list[str]) -> dict[str, dict]:
     """
-    Download 3-month daily prices for all tickers in one batch call,
-    then compute vol / momentum for each. Much faster than serial calls.
+    Download 3-month daily prices for all tickers in one batch call.
     """
     if not tickers:
         return {}
-    # Filter out non-standard symbols that yfinance can't batch (indices, crypto pairs)
-    clean = [t for t in tickers if re.match(r'^[A-Z]{1,5}(-[A-Z])?$', t)]
+    clean = [t for t in tickers if re.match(r'^[A-Z]{1,6}(-[A-Z])?$', t)]
     if not clean:
         return {}
     try:
@@ -236,19 +260,14 @@ def _enrich_batch(tickers: list[str]) -> dict[str, dict]:
             clean, period="3mo", interval="1d",
             auto_adjust=True, progress=False, threads=True,
         )
-        # yf.download returns MultiIndex columns when >1 ticker, flat when =1
-        if len(clean) == 1:
-            close = raw[["Close"]].rename(columns={"Close": clean[0]})
-        else:
-            close = raw["Close"] if "Close" in raw.columns.get_level_values(0) else raw
+        close_map = _safe_close(raw, clean)
     except Exception:
         return {}
 
     results: dict[str, dict] = {}
-    for t in clean:
+    for t, col in close_map.items():
         try:
-            col = close[t].dropna() if t in close.columns else None
-            if col is None or len(col) < 20:
+            if len(col) < 20:
                 continue
             prices  = col.values
             returns = np.diff(prices) / prices[:-1]
