@@ -40,6 +40,7 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
   const [livePrices, setLivePrices] = useState(null)   // {ticker: {current_price}}
   const [priceLoading, setPriceLoading] = useState(false)
   const [priceError, setPriceError] = useState(null)
+  const [priceApplied, setPriceApplied] = useState(false)
 
   const activeTarget = targetPortfolio === 'optimal' ? targetAllocations : (targetVolAllocations || targetAllocations)
   const [result, setResult] = useState(null)
@@ -107,17 +108,41 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
   // Recalculate holding values using entry→current price change
   const applyPriceUpdate = () => {
     if (!livePrices) return
+    let anyUpdated = false
     const updated = holdings.map(h => {
       const alloc = activeTarget.find(a => a.ticker === h.ticker)
-      const entry = alloc?.entry_price
+      const entry = Number(alloc?.entry_price) || 0
       const live  = livePrices[h.ticker]?.current_price
-      if (!entry || !live || entry === 0) return h
-      const priceChange = live / entry
-      return { ...h, current_value: Math.round(Number(h.current_value) * priceChange) }
+      if (!live) return h
+
+      // Base value: use current_value if the user entered it, else fall back to dollar_amount
+      const baseValue = Number(h.current_value) > 0
+        ? Number(h.current_value)
+        : Number(alloc?.dollar_amount) || 0
+
+      if (baseValue === 0) return h
+
+      let newValue
+      if (entry > 0) {
+        // We know entry price → scale proportionally
+        newValue = Math.round(baseValue * (live / entry))
+      } else {
+        // No entry price in this portfolio export — use live price as-is
+        // (holding value unchanged; live price shown for reference only)
+        return h
+      }
+
+      anyUpdated = true
+      return { ...h, current_value: newValue }
     })
-    setHoldings(updated)
-    setTotalValue(updated.reduce((s, x) => s + (Number(x.current_value) || 0), 0))
-    setResult(null)
+
+    if (anyUpdated) {
+      setHoldings(updated)
+      setTotalValue(updated.reduce((s, x) => s + (Number(x.current_value) || 0), 0))
+      setResult(null)
+      setPriceApplied(true)
+      setTimeout(() => setPriceApplied(false), 3000)
+    }
   }
 
   const runRebalance = async () => {
@@ -284,14 +309,23 @@ export default function RebalancingPanel({ targetAllocations, targetVolAllocatio
                   </tbody>
                 </table>
               </div>
-              <button type="button" onClick={applyPriceUpdate}
-                style={{ marginTop: '12px', padding: '7px 18px', fontSize: '12px', fontWeight: 700,
-                  background: 'var(--green)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                ✓ Apply Price Update to Holdings
-              </button>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '10px' }}>
-                Scales each holding's current value by its price change, then re-runs rebalance.
-              </span>
+              {activeTarget.some(a => !a.entry_price || a.entry_price === 0) && (
+                <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '7px', fontSize: '11px',
+                  background: 'rgba(250,173,20,.1)', color: '#faad14', border: '1px solid rgba(250,173,20,.3)' }}>
+                  ⚠ Some tickers are missing entry prices — regenerate or re-export the portfolio to enable price scaling for those tickers.
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+                <button type="button" onClick={applyPriceUpdate}
+                  style={{ padding: '7px 18px', fontSize: '12px', fontWeight: 700,
+                    background: priceApplied ? 'var(--green)' : 'var(--accent)',
+                    color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                  {priceApplied ? '✓ Holdings Updated!' : '✓ Apply Price Update to Holdings'}
+                </button>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Scales each holding's value by its entry→live price change, then click Run Rebalance.
+                </span>
+              </div>
             </div>
           )}
         </div>
