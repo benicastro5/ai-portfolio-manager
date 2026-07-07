@@ -428,7 +428,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
 
       {/* Tab: Backtest */}
       {tab === 'backtest' && (
-        <BacktestPanel allocations={portfolio.allocations} />
+        <BacktestPanel allocations={portfolio.allocations} monthlyContribution={userProfile.monthly_contribution || 0} />
       )}
 
       {/* Tab: Monte Carlo */}

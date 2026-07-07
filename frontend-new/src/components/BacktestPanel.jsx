@@ -110,9 +110,10 @@ function MetricCompare({ label, port, spy, lowerBetter = false }) {
   )
 }
 
-export default function BacktestPanel({ allocations }) {
+export default function BacktestPanel({ allocations, monthlyContribution = 0 }) {
   const [period, setPeriod]   = useState(3)
   const [rebal, setRebal]     = useState('none')
+  const [contrib, setContrib] = useState(monthlyContribution)
   const [result, setResult]   = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
@@ -125,6 +126,7 @@ export default function BacktestPanel({ allocations }) {
         initial_value: 10000,
         period_years: period,
         rebalance_freq: rebal,
+        monthly_contribution: Number(contrib) || 0,
       })
       setResult(data)
     } catch (e) {
@@ -145,6 +147,7 @@ export default function BacktestPanel({ allocations }) {
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
           Simulate how this portfolio would have performed historically using daily price data vs SPY benchmark.
           Initial investment: <strong>$10,000</strong>.
+          {contrib > 0 && <span style={{ color: 'var(--green)', fontWeight: 600 }}> + ${Number(contrib).toLocaleString()}/mo contributions.</span>}
         </p>
         <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="form-group" style={{ margin: 0 }}>
@@ -156,6 +159,11 @@ export default function BacktestPanel({ allocations }) {
               <option value={3}>3 Years</option>
               <option value={5}>5 Years</option>
             </select>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label>Monthly Contribution ($)</label>
+            <input type="number" min="0" value={contrib} onChange={e => setContrib(e.target.value)}
+              style={{ padding: '7px 12px', borderRadius: '8px', border: '1.5px solid var(--border)', fontSize: '13px', width: '130px' }} />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label>Rebalancing</label>
@@ -192,11 +200,16 @@ export default function BacktestPanel({ allocations }) {
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Portfolio final</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Portfolio value</div>
                   <div style={{ fontSize: '18px', fontWeight: 800,
                     color: (pm?.total_return ?? 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
                     {fmtDollar(pm?.final_value)}
                   </div>
+                  {result.monthly_contribution > 0 && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Total invested: {fmtDollar(result.total_contributed)}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

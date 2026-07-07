@@ -35,6 +35,7 @@ def run_backtest(
     initial_value: float = 10000,
     period_years: int = 3,
     rebalance_freq: str = "none",  # "none" | "quarterly" | "annual"
+    monthly_contribution: float = 0.0,
 ) -> dict:
     tickers = [a["ticker"] for a in allocations]
     weights = {a["ticker"]: a["weight_decimal"] for a in allocations}
@@ -74,10 +75,27 @@ def run_backtest(
     shares = {t: (initial_value * norm_w[t]) / float(day0[t]) for t in available}
     spy_shares = initial_value / float(day0["SPY"]) if "SPY" in day0 else None
 
-    # Track rebalance dates
-    last_rebal = dates[0]
+    # Track rebalance and contribution dates
+    last_rebal   = dates[0]
+    last_contrib = dates[0]
+    total_contributed = initial_value  # track total cash put in (for return calc)
 
     for i, (date, row) in enumerate(prices_clean.iterrows()):
+        # Monthly contribution: inject on first trading day of each new month
+        if monthly_contribution > 0 and i > 0:
+            months_since_contrib = (date.year - last_contrib.year) * 12 + (date.month - last_contrib.month)
+            if months_since_contrib >= 1:
+                # Buy new shares at target weights with the contribution amount
+                for t in available:
+                    price = float(row[t])
+                    if price > 0:
+                        shares[t] += (monthly_contribution * norm_w[t]) / price
+                # SPY benchmark also gets the same contribution
+                if spy_shares is not None and "SPY" in row and float(row["SPY"]) > 0:
+                    spy_shares += monthly_contribution / float(row["SPY"])
+                total_contributed += monthly_contribution
+                last_contrib = date
+
         # Rebalance?
         if rebalance_freq != "none" and i > 0:
             months_since = (date.year - last_rebal.year) * 12 + (date.month - last_rebal.month)
@@ -92,14 +110,16 @@ def run_backtest(
         spy_values[i]  = spy_shares * float(row["SPY"]) if spy_shares and "SPY" in row else np.nan
 
     # ── Compute metrics ───────────────────────────────────────────────────────
-    def metrics(vals: np.ndarray, label: str) -> dict:
+    def metrics(vals: np.ndarray, label: str, contributed: float = None) -> dict:
         vals = vals[~np.isnan(vals)]
         if len(vals) < 2:
             return {}
         returns_daily = np.diff(vals) / vals[:-1]
-        total_ret     = (vals[-1] / vals[0] - 1) * 100
-        n_years       = len(vals) / 252
-        ann_ret       = ((vals[-1] / vals[0]) ** (1 / n_years) - 1) * 100 if n_years > 0.1 else total_ret
+        # With contributions, measure gain over total cash invested
+        invested = contributed if contributed and contributed > vals[0] else vals[0]
+        total_ret = (vals[-1] - invested) / invested * 100
+        n_years   = len(vals) / 252
+        ann_ret   = ((vals[-1] / vals[0]) ** (1 / n_years) - 1) * 100 if n_years > 0.1 else total_ret
         ann_vol       = float(np.std(returns_daily)) * np.sqrt(252) * 100
         rf_daily      = 0.045 / 252
         sharpe        = float((np.mean(returns_daily) - rf_daily) / (np.std(returns_daily) + 1e-10) * np.sqrt(252))
@@ -129,8 +149,8 @@ def run_backtest(
             "final_value":  round(float(vals[-1]), 2),
         }
 
-    port_metrics = metrics(port_values, "Portfolio")
-    spy_metrics  = metrics(spy_values,  "SPY (Benchmark)")
+    port_metrics = metrics(port_values, "Portfolio", total_contributed)
+    spy_metrics  = metrics(spy_values,  "SPY (Benchmark)", total_contributed)
 
     # ── Annual return breakdown ───────────────────────────────────────────────
     df_port = pd.Series(port_values, index=dates)
@@ -162,10 +182,12 @@ def run_backtest(
         "spy_metrics":       spy_metrics,
         "annual_returns":    annual_returns,
         "chart_data":        chart_data,
-        "period_years":      period_years,
-        "rebalance_freq":    rebalance_freq,
-        "initial_value":     initial_value,
-        "missing_tickers":   missing,
-        "start_date":        start,
-        "end_date":          end,
+        "period_years":        period_years,
+        "rebalance_freq":      rebalance_freq,
+        "initial_value":       initial_value,
+        "monthly_contribution": monthly_contribution,
+        "total_contributed":   round(total_contributed, 2),
+        "missing_tickers":     missing,
+        "start_date":          start,
+        "end_date":            end,
     }

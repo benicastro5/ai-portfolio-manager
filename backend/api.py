@@ -386,6 +386,7 @@ class BacktestRequest(BaseModel):
     initial_value: float = 10000
     period_years: int = 3
     rebalance_freq: str = "none"  # "none" | "quarterly" | "annual"
+    monthly_contribution: float = 0.0
 
 @app.post("/portfolio/backtest")
 def portfolio_backtest(req: BacktestRequest):
@@ -395,6 +396,7 @@ def portfolio_backtest(req: BacktestRequest):
             initial_value=req.initial_value,
             period_years=req.period_years,
             rebalance_freq=req.rebalance_freq,
+            monthly_contribution=req.monthly_contribution,
         )
         return result
     except ValueError as e:
