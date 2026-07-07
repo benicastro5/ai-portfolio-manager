@@ -218,40 +218,58 @@ def scan_universe_momentum(top_n: int = 20) -> dict[str, dict]:
     return results
 
 
-# ── Market data enrichment ─────────────────────────────────────────────────────
+# ── Market data enrichment (batched) ──────────────────────────────────────────
 
-def _enrich_ticker(ticker: str) -> dict | None:
+def _enrich_batch(tickers: list[str]) -> dict[str, dict]:
+    """
+    Download 3-month daily prices for all tickers in one batch call,
+    then compute vol / momentum for each. Much faster than serial calls.
+    """
+    if not tickers:
+        return {}
+    # Filter out non-standard symbols that yfinance can't batch (indices, crypto pairs)
+    clean = [t for t in tickers if re.match(r'^[A-Z]{1,5}(-[A-Z])?$', t)]
+    if not clean:
+        return {}
     try:
-        hist = yf.Ticker(ticker).history(period="3mo", interval="1d", auto_adjust=True)
-        if hist.empty or len(hist) < 20:
-            return None
-        prices  = hist["Close"].dropna().values
-        returns = np.diff(prices) / prices[:-1]
-        ann_vol  = float(np.std(returns)) * np.sqrt(252) * 100
-        mom_1m   = float(prices[-1] / prices[-21] - 1) * 100 if len(prices) >= 21 else 0.0
-        mom_3m   = float(prices[-1] / prices[0]  - 1) * 100
-        curr_px  = float(prices[-1])
-        try:
-            fi = yf.Ticker(ticker).fast_info
-            market_cap = getattr(fi, "market_cap", None)
-        except Exception:
-            market_cap = None
-        vol_score  = min(100, ann_vol * 1.5)
-        cap_score  = 0  if (market_cap and market_cap > 10e9) else \
-                    (20  if (market_cap and market_cap >  2e9) else \
-                    (50  if (market_cap and market_cap > 300e6) else 80))
-        # ETFs in our universe get a lower spec_score baseline
-        if ticker in ETF_UNIVERSE:
-            cap_score = min(cap_score, 20)
-        spec_score = int(min(100, vol_score * 0.6 + cap_score * 0.4))
-        return {
-            "ticker": ticker, "current_price": round(curr_px, 2),
-            "ann_vol": round(ann_vol, 1), "mom_1m": round(mom_1m, 1),
-            "mom_3m": round(mom_3m, 1), "spec_score": spec_score,
-            "market_cap": market_cap,
-        }
+        raw = yf.download(
+            clean, period="3mo", interval="1d",
+            auto_adjust=True, progress=False, threads=True,
+        )
+        # yf.download returns MultiIndex columns when >1 ticker, flat when =1
+        if len(clean) == 1:
+            close = raw[["Close"]].rename(columns={"Close": clean[0]})
+        else:
+            close = raw["Close"] if "Close" in raw.columns.get_level_values(0) else raw
     except Exception:
-        return None
+        return {}
+
+    results: dict[str, dict] = {}
+    for t in clean:
+        try:
+            col = close[t].dropna() if t in close.columns else None
+            if col is None or len(col) < 20:
+                continue
+            prices  = col.values
+            returns = np.diff(prices) / prices[:-1]
+            ann_vol  = float(np.std(returns)) * np.sqrt(252) * 100
+            mom_1m   = float(prices[-1] / prices[-21] - 1) * 100 if len(prices) >= 21 else 0.0
+            mom_3m   = float(prices[-1] / prices[0]  - 1) * 100
+            curr_px  = float(prices[-1])
+
+            # Spec score: ETFs in universe treated as established (cap_score capped low)
+            vol_score = min(100, ann_vol * 1.5)
+            cap_score = 20 if t in ETF_UNIVERSE else 60  # default unknown = mid-spec
+            spec_score = int(min(100, vol_score * 0.6 + cap_score * 0.4))
+
+            results[t] = {
+                "ticker": t, "current_price": round(curr_px, 2),
+                "ann_vol": round(ann_vol, 1), "mom_1m": round(mom_1m, 1),
+                "mom_3m": round(mom_3m, 1), "spec_score": spec_score,
+            }
+        except Exception:
+            continue
+    return results
 
 
 # ── Risk helpers ───────────────────────────────────────────────────────────────
@@ -311,7 +329,8 @@ def _etf_proxy(trending_ticker: str, meta: dict, goal: str, risk_tolerance: floa
         if not fallback or fallback in used:
             return None
         proxy_ticker = fallback
-    enriched = _enrich_ticker(proxy_ticker)
+    enriched_map = _enrich_batch([proxy_ticker])
+    enriched = enriched_map.get(proxy_ticker)
     if not enriched:
         return None
     used.add(proxy_ticker)
@@ -386,14 +405,15 @@ def run_trend_scan(goal: str = "balanced", risk_tolerance: float = 15) -> dict:
         return {"opportunities": [], "scanned": 0,
                 "as_of": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}
 
-    # 4. Enrich top 50 candidates
+    # 4. Enrich top 50 candidates in one batch download
     top_candidates = sorted(all_candidates.items(), key=lambda x: x[1]["score"], reverse=True)[:50]
+    enriched_map   = _enrich_batch([t for t, _ in top_candidates])
 
     results    = []
     proxy_used: set[str] = set()
 
     for ticker, meta in top_candidates:
-        enriched = _enrich_ticker(ticker)
+        enriched = enriched_map.get(ticker)
         if enriched:
             fits     = _fits_profile(enriched, goal, risk_tolerance)
             risk_lbl = _risk_label(enriched["spec_score"])
