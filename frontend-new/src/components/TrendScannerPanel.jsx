@@ -55,11 +55,17 @@ function OpportunityCard({ opp }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
         {/* Left: ticker + name */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--accent)' }}>{opp.ticker}</span>
             {opp.fits_profile && (
               <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '10px',
                 background: 'var(--green)', color: '#fff' }}>✓ Fits Profile</span>
+            )}
+            {opp.etf_proxy && (
+              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '10px',
+                background: 'rgba(99,102,241,.15)', color: '#818cf8', border: '1px solid #818cf880' }}>
+                ⇢ ETF Proxy
+              </span>
             )}
           </div>
           {opp.name && opp.name !== opp.ticker && (
@@ -124,6 +130,12 @@ function OpportunityCard({ opp }) {
               "{t}"
             </div>
           ))}
+        </div>
+      )}
+      {opp.etf_proxy_note && (
+        <div style={{ marginTop: '10px', padding: '7px 10px', borderRadius: '7px', fontSize: '11px',
+          background: 'rgba(99,102,241,.08)', color: '#818cf8', border: '1px solid rgba(99,102,241,.25)' }}>
+          ⇢ {opp.etf_proxy_note}
         </div>
       )}
       <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'right' }}>

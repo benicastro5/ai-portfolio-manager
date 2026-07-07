@@ -104,6 +104,13 @@ ETF_UNIVERSE = {
     "VNQ": {"name": "Real Estate ETF", "asset_class": "Real Estate", "sector": "REITs"},
     "DBC": {"name": "Commodity Index ETF", "asset_class": "Commodities", "sector": "Diversified Commodities"},
     "DBA": {"name": "Invesco DB Agriculture Fund", "asset_class": "Commodities", "sector": "Agriculture"},
+    "ARKK": {"name": "ARK Innovation ETF", "asset_class": "US Equity", "sector": "Technology"},
+    "BITO": {"name": "ProShares Bitcoin Strategy ETF", "asset_class": "Alternatives", "sector": "Cryptocurrency"},
+    "AIQ":  {"name": "Global X AI & Big Data ETF", "asset_class": "US Equity", "sector": "Technology"},
+    "CLOU": {"name": "Global X Cloud Computing ETF", "asset_class": "US Equity", "sector": "Technology"},
+    "FINX": {"name": "Global X FinTech ETF", "asset_class": "US Equity", "sector": "Financials"},
+    "VYM":  {"name": "Vanguard High Dividend Yield ETF", "asset_class": "US Equity", "sector": "Broad Market"},
+    "VNM":  {"name": "VanEck Vietnam ETF", "asset_class": "International Equity", "sector": "Southeast Asia"},
     # ── Geographic ETFs ───────────────────────────────────────────
     "VT":   {"name": "Vanguard Total World Stock ETF",       "asset_class": "Global Equity",        "sector": "Global"},
     "ACWI": {"name": "iShares MSCI ACWI ETF",               "asset_class": "Global Equity",        "sector": "Global"},
