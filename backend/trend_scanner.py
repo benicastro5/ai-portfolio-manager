@@ -281,6 +281,9 @@ def _enrich_batch(tickers: list[str]) -> dict[str, dict]:
             cap_score = 20 if t in ETF_UNIVERSE else 60  # default unknown = mid-spec
             spec_score = int(min(100, vol_score * 0.6 + cap_score * 0.4))
 
+            import math
+            if any(math.isnan(v) or math.isinf(v) for v in [ann_vol, mom_1m, mom_3m, curr_px]):
+                continue
             results[t] = {
                 "ticker": t, "current_price": round(curr_px, 2),
                 "ann_vol": round(ann_vol, 1), "mom_1m": round(mom_1m, 1),

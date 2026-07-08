@@ -485,9 +485,19 @@ class TrendScanRequest(BaseModel):
 
 @app.post("/market/trend-scan")
 def market_trend_scan(req: TrendScanRequest):
-    import traceback
+    import traceback, math, json
     try:
         result = run_trend_scan(goal=req.goal, risk_tolerance=req.risk_tolerance)
-        return result
+        # Sanitize: replace NaN/Inf with None so FastAPI can serialize
+        def sanitize(obj):
+            if isinstance(obj, float):
+                return None if (math.isnan(obj) or math.isinf(obj)) else obj
+            if isinstance(obj, dict):
+                return {k: sanitize(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [sanitize(v) for v in obj]
+            return obj
+        return sanitize(result)
     except Exception as e:
-        raise HTTPException(500, traceback.format_exc())
+        logger.error("trend-scan error: %s", traceback.format_exc())
+        raise HTTPException(500, detail=traceback.format_exc())
