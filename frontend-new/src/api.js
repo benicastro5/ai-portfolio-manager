@@ -63,6 +63,16 @@ export async function fetchLivePrices(tickers) {
   return res.json()
 }
 
+export async function fetchSecurityDetail(ticker, allocation) {
+  const res = await fetch(`${BASE}/market/security-detail`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticker, allocation }),
+  })
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || `Error ${res.status}`) }
+  return res.json()
+}
+
 export async function runTrendScan(payload) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 180_000) // 3-min timeout

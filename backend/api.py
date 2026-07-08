@@ -477,27 +477,185 @@ def market_prices(req: PricesRequest):
     return result
 
 
-# ─── Trend Scanner ────────────────────────────────────────────────────────────
+# ─── Security Detail ─────────────────────────────────────────────────────────
 
-class TrendScanRequest(BaseModel):
-    goal: str = "balanced"
-    risk_tolerance: float = 15.0
+class SecurityDetailRequest(BaseModel):
+    ticker: str
+    allocation: dict  # the full allocation object from the portfolio
 
-@app.post("/market/trend-scan")
-def market_trend_scan(req: TrendScanRequest):
-    import traceback, math, json
+@app.post("/market/security-detail")
+def security_detail(req: SecurityDetailRequest):
+    import math, yfinance as yf, numpy as np
     try:
-        result = run_trend_scan(goal=req.goal, risk_tolerance=req.risk_tolerance)
-        # Sanitize: replace NaN/Inf with None so FastAPI can serialize
-        def sanitize(obj):
-            if isinstance(obj, float):
-                return None if (math.isnan(obj) or math.isinf(obj)) else obj
-            if isinstance(obj, dict):
-                return {k: sanitize(v) for k, v in obj.items()}
-            if isinstance(obj, list):
-                return [sanitize(v) for v in obj]
-            return obj
-        return sanitize(result)
+        ticker = req.ticker
+        alloc  = req.allocation
+
+        # 1. Price history (6 months daily)
+        hist = yf.Ticker(ticker).history(period="6mo", interval="1d", auto_adjust=True)
+        prices = []
+        if not hist.empty:
+            for date, row in hist["Close"].items():
+                v = float(row)
+                if not math.isnan(v):
+                    prices.append({"date": str(date.date()), "price": round(v, 2)})
+
+        # 2. Technicals from price history
+        technicals = {}
+        if len(prices) >= 50:
+            closes = [p["price"] for p in prices]
+            ma20  = round(sum(closes[-20:]) / 20, 2)
+            ma50  = round(sum(closes[-50:]) / 50, 2)
+            ma200 = round(sum(closes[-200:]) / 200, 2) if len(closes) >= 200 else None
+            curr  = closes[-1]
+            # RSI-14
+            deltas = [closes[i] - closes[i-1] for i in range(1, len(closes))]
+            gains  = [d for d in deltas[-14:] if d > 0]
+            losses = [-d for d in deltas[-14:] if d < 0]
+            avg_g  = sum(gains) / 14 if gains else 0
+            avg_l  = sum(losses) / 14 if losses else 0.001
+            rs     = avg_g / avg_l
+            rsi    = round(100 - 100 / (1 + rs), 1)
+            technicals = {
+                "current_price": curr,
+                "ma20": ma20, "ma50": ma50, "ma200": ma200,
+                "above_ma20": curr > ma20,
+                "above_ma50": curr > ma50,
+                "above_ma200": curr > ma200 if ma200 else None,
+                "rsi14": rsi,
+                "rsi_signal": "overbought" if rsi > 70 else ("oversold" if rsi < 30 else "neutral"),
+                "trend": "uptrend" if curr > ma50 > ma200 else ("downtrend" if curr < ma50 else "mixed"),
+            }
+
+        # 3. Fundamentals (best-effort)
+        fund = {}
+        try:
+            info = yf.Ticker(ticker).info
+            fund = {
+                "pe_ratio":        info.get("trailingPE"),
+                "forward_pe":      info.get("forwardPE"),
+                "pb_ratio":        info.get("priceToBook"),
+                "dividend_yield":  round(info.get("dividendYield", 0) * 100, 2) if info.get("dividendYield") else None,
+                "revenue_growth":  round(info.get("revenueGrowth", 0) * 100, 1) if info.get("revenueGrowth") else None,
+                "earnings_growth": round(info.get("earningsGrowth", 0) * 100, 1) if info.get("earningsGrowth") else None,
+                "beta":            info.get("beta"),
+                "52w_high":        info.get("fiftyTwoWeekHigh"),
+                "52w_low":         info.get("fiftyTwoWeekLow"),
+                "market_cap":      info.get("marketCap"),
+                "short_name":      info.get("shortName") or info.get("longName"),
+                "description":     (info.get("longBusinessSummary") or "")[:400],
+            }
+            # Clean NaN
+            fund = {k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in fund.items()}
+        except Exception:
+            pass
+
+        # 4. Build thesis from allocation data + technicals + fundamentals
+        thesis = _build_thesis(ticker, alloc, technicals, fund)
+
+        return {
+            "ticker": ticker,
+            "prices": prices[-126:],  # last 6mo of daily prices
+            "technicals": technicals,
+            "fundamentals": fund,
+            "thesis": thesis,
+        }
     except Exception as e:
-        logger.error("trend-scan error: %s", traceback.format_exc())
+        import traceback
         raise HTTPException(500, detail=traceback.format_exc())
+
+
+def _build_thesis(ticker: str, alloc: dict, tech: dict, fund: dict) -> dict:
+    """Generate a structured thesis from all available signals."""
+    points = []
+    warnings = []
+    score = 0  # -3 to +3 conviction
+
+    # Momentum
+    m1 = alloc.get("momentum_3m", 0) or 0
+    m12 = alloc.get("momentum_12m", 0) or 0
+    if m1 > 5:
+        points.append(f"Strong 3-month momentum of +{m1:.1f}% shows near-term price strength.")
+        score += 1
+    elif m1 < -5:
+        warnings.append(f"Negative 3-month momentum ({m1:.1f}%) — price has been under pressure recently.")
+        score -= 1
+    if m12 > 10:
+        points.append(f"12-month momentum of +{m12:.1f}% confirms a sustained uptrend.")
+        score += 1
+
+    # Expected return vs vol
+    exp_ret = alloc.get("expected_return", 0) or 0
+    vol     = alloc.get("volatility", 0) or 0
+    sharpe  = alloc.get("sharpe", 0) or 0
+    if exp_ret > 8:
+        points.append(f"Forecast model projects +{exp_ret:.1f}% annualised return.")
+        score += 1
+    if sharpe > 0.8:
+        points.append(f"Sharpe ratio of {sharpe:.2f} indicates strong risk-adjusted return potential.")
+        score += 1
+    elif sharpe < 0.3:
+        warnings.append(f"Sharpe ratio of {sharpe:.2f} is low — returns may not justify the volatility.")
+        score -= 1
+
+    # Regime
+    regime = alloc.get("regime", "neutral")
+    if regime == "bull":
+        points.append("Current regime signal is bullish — momentum and macro factors favour this position.")
+        score += 1
+    elif regime == "bear":
+        warnings.append("Regime signal is bearish — hold size may be appropriate as a hedge or defensive play.")
+        score -= 1
+
+    # Technicals
+    if tech:
+        rsi = tech.get("rsi14")
+        trend = tech.get("trend")
+        if trend == "uptrend":
+            points.append(f"Price is in an uptrend (above both 50-day and 200-day moving averages).")
+            score += 1
+        elif trend == "downtrend":
+            warnings.append("Price is in a downtrend (below 50-day MA) — watch for further weakness.")
+            score -= 1
+        if rsi and rsi > 70:
+            warnings.append(f"RSI at {rsi} is overbought — short-term pullback risk elevated.")
+        elif rsi and rsi < 30:
+            points.append(f"RSI at {rsi} is oversold — potential mean-reversion opportunity.")
+
+    # Fundamentals
+    pe = fund.get("pe_ratio")
+    fwd_pe = fund.get("forward_pe")
+    div = fund.get("dividend_yield")
+    eg  = fund.get("earnings_growth")
+    if pe and fwd_pe and fwd_pe < pe * 0.85:
+        points.append(f"Forward P/E of {fwd_pe:.1f}x is below trailing P/E of {pe:.1f}x — earnings expected to grow.")
+        score += 1
+    if div and div > 2:
+        points.append(f"Dividend yield of {div:.1f}% provides income while holding.")
+    if eg and eg > 10:
+        points.append(f"Earnings growth of +{eg:.1f}% supports a higher valuation multiple.")
+        score += 1
+    elif eg and eg < -10:
+        warnings.append(f"Earnings growth is negative ({eg:.1f}%) — watch for guidance cuts.")
+        score -= 1
+
+    # Overall conviction
+    score = max(-3, min(3, score))
+    conviction = {
+        3: "High", 2: "High", 1: "Moderate", 0: "Neutral",
+        -1: "Cautious", -2: "Cautious", -3: "Low"
+    }[score]
+
+    summary = (
+        f"{ticker} was selected for its {alloc.get('sector','') or alloc.get('asset_class','')} exposure "
+        f"at a {alloc.get('weight',0):.1f}% portfolio weight. "
+    )
+    if points:
+        summary += points[0]
+
+    return {
+        "summary":    summary,
+        "conviction": conviction,
+        "score":      score,
+        "bull_case":  points,
+        "risk_flags": warnings,
+    }

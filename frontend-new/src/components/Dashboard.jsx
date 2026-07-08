@@ -16,7 +16,7 @@ import BenchmarkComparison from './BenchmarkComparison'
 import BrokerPanel from './BrokerPanel'
 import MacroRegimePanel from './MacroRegimePanel'
 import BacktestPanel from './BacktestPanel'
-import TrendScannerPanel from './TrendScannerPanel'
+import SecurityDetailModal from './SecurityDetailModal'
 import { savePortfolio, loadSaved, deleteSaved } from '../utils/savedPortfolios'
 import { alpacaConnect, alpacaPositions as fetchAlpacaPositions } from '../api'
 
@@ -124,6 +124,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
   const [alpacaCreds, setAlpacaCreds] = useState(null)
   const [alpacaAccount, setAlpacaAccount] = useState(null)
   const [alpacaPositions, setAlpacaPositions] = useState(null)
+  const [selectedSecurity, setSelectedSecurity] = useState(null)
   const printRef = useRef()
 
   const {
@@ -162,7 +163,6 @@ export default function Dashboard({ data, onLoadPortfolio }) {
     { id: 'frontier',     label: '~ Efficient Frontier' },
     { id: 'rebalance',    label: '⟳ Rebalancing' },
     { id: 'broker',       label: '◈ Broker' },
-    { id: 'trends',       label: '◈ Trends' },
     { id: 'explain',      label: '◉ AI Explanation' },
   ]
 
@@ -341,7 +341,11 @@ export default function Dashboard({ data, onLoadPortfolio }) {
           <div className="card">
             <div className="card-title">Dollar Allocation</div>
             {portfolio.allocations.map(a => (
-              <div className="alloc-row" key={a.ticker}>
+              <div className="alloc-row" key={a.ticker}
+                onClick={() => setSelectedSecurity(a)}
+                style={{ cursor: 'pointer', borderRadius: '6px', transition: 'background .15s' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+                onMouseLeave={e => e.currentTarget.style.background = ''}>
                 <span className="alloc-ticker">{a.ticker}</span>
                 <span className="alloc-name">{a.name}</span>
                 <div className="alloc-bar-track">
@@ -349,6 +353,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
                 </div>
                 <span className="alloc-pct">{a.weight?.toFixed(1)}%</span>
                 <span className="alloc-dollar">{fmtDollar(a.dollar_amount)}</span>
+                <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 700, marginLeft: '6px' }}>◉</span>
               </div>
             ))}
             {userProfile.monthly_contribution > 0 && (
@@ -376,8 +381,11 @@ export default function Dashboard({ data, onLoadPortfolio }) {
               </thead>
               <tbody>
                 {portfolio.allocations.map(a => (
-                  <tr key={a.ticker}>
-                    <td><strong style={{ color: 'var(--accent)' }}>{a.ticker}</strong></td>
+                  <tr key={a.ticker} onClick={() => setSelectedSecurity(a)}
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}>
+                    <td><strong style={{ color: 'var(--accent)' }}>{a.ticker}</strong> <span style={{ fontSize: '10px', color: 'var(--accent)' }}>◉</span></td>
                     <td>{a.name}</td>
                     <td><span className="tag tag-blue">{a.asset_class}</span></td>
                     <td>{a.weight?.toFixed(1)}%</td>
@@ -549,11 +557,11 @@ export default function Dashboard({ data, onLoadPortfolio }) {
         />
       )}
 
-      {/* Tab: Trend Scanner */}
-      {tab === 'trends' && (
-        <TrendScannerPanel
-          goal={userProfile?.goal}
-          riskTolerance={userProfile?.risk_tolerance}
+      {/* Security Detail Modal */}
+      {selectedSecurity && (
+        <SecurityDetailModal
+          allocation={selectedSecurity}
+          onClose={() => setSelectedSecurity(null)}
         />
       )}
 
