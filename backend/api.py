@@ -485,8 +485,9 @@ class TrendScanRequest(BaseModel):
 
 @app.post("/market/trend-scan")
 def market_trend_scan(req: TrendScanRequest):
+    import traceback
     try:
         result = run_trend_scan(goal=req.goal, risk_tolerance=req.risk_tolerance)
         return result
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, traceback.format_exc())
