@@ -115,8 +115,6 @@ function BrokerStatusBar({ account, positions, onConnect, onDisconnect, onSwitch
   )
 }
 
-const ADMIN_PASS = import.meta.env.VITE_ADMIN_PASS || ''
-
 export default function Dashboard({ data, onLoadPortfolio }) {
   const [tab, setTab] = useState('portfolio')
   const [saveName, setSaveName] = useState('')
@@ -126,17 +124,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
   const [alpacaCreds, setAlpacaCreds] = useState(null)
   const [alpacaAccount, setAlpacaAccount] = useState(null)
   const [alpacaPositions, setAlpacaPositions] = useState(null)
-  const [brokerUnlocked, setBrokerUnlocked] = useState(false)
   const printRef = useRef()
-
-  const unlockBroker = () => {
-    const pass = window.prompt('Enter broker access code:')
-    if (pass && pass === ADMIN_PASS) {
-      setBrokerUnlocked(true)
-    } else if (pass !== null) {
-      alert('Incorrect code.')
-    }
-  }
 
   const {
     portfolio, target_vol_portfolio, ranked_etfs, efficient_frontier,
@@ -173,7 +161,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
     { id: 'ranking',      label: '↑ ETF Ranking' },
     { id: 'frontier',     label: '~ Efficient Frontier' },
     { id: 'rebalance',    label: '⟳ Rebalancing' },
-    { id: 'broker',       label: brokerUnlocked ? '◈ Broker' : '🔒 Broker' },
+    { id: 'broker',       label: '◈ Broker' },
     { id: 'trends',       label: '◈ Trends' },
     { id: 'explain',      label: '◉ AI Explanation' },
   ]
@@ -544,17 +532,7 @@ export default function Dashboard({ data, onLoadPortfolio }) {
       )}
 
       {/* Tab: Broker */}
-      {tab === 'broker' && !brokerUnlocked && (
-        <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <div style={{ fontSize: '40px', marginBottom: '16px' }}>🔒</div>
-          <div style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>Broker Access Restricted</div>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px', maxWidth: '360px', margin: '0 auto 24px' }}>
-            The broker integration allows direct trade execution. Access is restricted to authorized users only.
-          </p>
-          <button onClick={unlockBroker}>Enter Access Code</button>
-        </div>
-      )}
-      {tab === 'broker' && brokerUnlocked && (
+      {tab === 'broker' && (
         <BrokerPanel
           rebalanceTrades={rebalanceTrades}
           alpacaCreds={alpacaCreds}
